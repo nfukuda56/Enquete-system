@@ -1,6 +1,6 @@
 // Google Apps Script Web App URL
 // google-apps-script/SETUP.md の手順に従ってデプロイし、URLを設定してください
-const APPS_SCRIPT_URL = 'YOUR_APPS_SCRIPT_URL_HERE';
+const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwpgsHKiC0zN7DC8nAjYGredMITuF7yvwcZGuz1kM6kDTVaN-sv_zYx27Ka3xAi3NnQ/exec';
 
 // セッションID（ブラウザごとにユニーク）
 function getSessionId() {
