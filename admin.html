@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>管理画面 - セミナーアンケート</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+</head>
+<body>
+    <div class="container admin-container">
+        <header>
+            <h1>アンケート管理画面</h1>
+            <div class="header-stats">
+                <div class="stat-box">
+                    <span class="stat-label">総回答数</span>
+                    <span class="stat-value" id="total-responses">0</span>
+                </div>
+                <div class="stat-box live-indicator">
+                    <span class="live-dot"></span>
+                    <span>リアルタイム更新中</span>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="admin-tabs">
+                <button class="tab-btn active" data-tab="results">回答結果</button>
+                <button class="tab-btn" data-tab="questions">質問管理</button>
+            </div>
+
+            <!-- 回答結果タブ -->
+            <div id="results-tab" class="tab-content active">
+                <div class="loading" id="loading">
+                    <div class="spinner"></div>
+                    <p>データを読み込み中...</p>
+                </div>
+
+                <div id="results-container" style="display: none;">
+                    <!-- 結果がここに動的に挿入されます -->
+                </div>
+            </div>
+
+            <!-- 質問管理タブ -->
+            <div id="questions-tab" class="tab-content" style="display: none;">
+                <div class="question-form-container">
+                    <h2>新しい質問を追加</h2>
+                    <form id="add-question-form">
+                        <div class="form-group">
+                            <label for="question-text">質問文</label>
+                            <input type="text" id="question-text" required
+                                   placeholder="例: 今日のセミナーの満足度を教えてください">
+                        </div>
+
+                        <div class="form-group">
+                            <label for="question-type">質問タイプ</label>
+                            <select id="question-type" onchange="toggleOptionsInput()">
+                                <option value="single">単一選択（ラジオボタン）</option>
+                                <option value="multiple">複数選択（チェックボックス）</option>
+                                <option value="text">自由記述</option>
+                                <option value="rating">5段階評価</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group" id="options-group">
+                            <label for="question-options">選択肢（1行に1つ）</label>
+                            <textarea id="question-options" rows="4"
+                                      placeholder="とても満足&#10;満足&#10;普通&#10;不満&#10;とても不満"></textarea>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="question-required">
+                                <input type="checkbox" id="question-required" checked>
+                                必須回答
+                            </label>
+                        </div>
+
+                        <button type="submit" class="btn btn-primary">質問を追加</button>
+                    </form>
+                </div>
+
+                <div class="questions-list-container">
+                    <h2>登録済み質問一覧</h2>
+                    <div id="questions-list">
+                        <!-- 質問リストがここに表示されます -->
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 セミナーアンケートシステム - 管理画面</p>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="admin.js"></script>
+</body>
+</html>

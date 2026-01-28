@@ -1,22 +1,66 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="UTF-8">
-  <title>アンケート</title>
-  <link rel="stylesheet" href="style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>セミナーアンケート</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
-  <h1>簡単アンケート</h1>
+    <div class="container">
+        <header>
+            <h1>セミナーアンケート</h1>
+            <p class="subtitle">ご参加ありがとうございます。以下のアンケートにご回答ください。</p>
+        </header>
 
-  <p>Q1. 満足度は？</p>
-  <select id="q1">
-    <option value="5">とても満足</option>
-    <option value="3">普通</option>
-    <option value="1">不満</option>
-  </select>
+        <main id="survey-container">
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>読み込み中...</p>
+            </div>
 
-  <button onclick="submitSurvey()">送信</button>
+            <form id="survey-form" style="display: none;">
+                <div id="questions-container">
+                    <!-- 質問がここに動的に挿入されます -->
+                </div>
 
-  <script src="app.js"></script>
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" id="submit-btn">
+                        回答を送信
+                    </button>
+                </div>
+            </form>
+
+            <div id="thank-you" class="thank-you" style="display: none;">
+                <div class="thank-you-icon">&#10003;</div>
+                <h2>ご回答ありがとうございました</h2>
+                <p>アンケートへのご協力、誠にありがとうございます。</p>
+            </div>
+
+            <div id="already-submitted" class="already-submitted" style="display: none;">
+                <h2>回答済みです</h2>
+                <p>このアンケートには既にご回答いただいています。</p>
+                <button class="btn btn-secondary" onclick="resetAndResubmit()">
+                    もう一度回答する
+                </button>
+            </div>
+
+            <div id="error-message" class="error-message" style="display: none;">
+                <h2>エラーが発生しました</h2>
+                <p id="error-text"></p>
+                <button class="btn btn-secondary" onclick="location.reload()">
+                    再読み込み
+                </button>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 セミナーアンケートシステム</p>
+        </footer>
+    </div>
+
+    <script src="config.js"></script>
+    <script src="app.js"></script>
 </body>
 </html>
