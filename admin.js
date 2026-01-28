@@ -3,14 +3,15 @@
 let questions = [];
 let responses = [];
 let charts = {};
-let realtimeSubscription = null;
+let pollingInterval = null;
+const POLLING_INTERVAL_MS = 5000; // 5秒ごとに更新
 
 // 初期化
 document.addEventListener('DOMContentLoaded', async () => {
     setupTabs();
     await loadQuestions();
     await loadResponses();
-    setupRealtimeSubscription();
+    startPolling();
     setupQuestionForm();
 });
 
@@ -39,14 +40,11 @@ function setupTabs() {
 // 質問を読み込む
 async function loadQuestions() {
     try {
-        const { data, error } = await supabase
-            .from('questions')
-            .select('*')
-            .order('sort_order', { ascending: true });
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=getQuestions`);
+        if (!response.ok) throw new Error('Failed to fetch questions');
 
-        if (error) throw error;
-
-        questions = data || [];
+        const data = await response.json();
+        questions = data.sort((a, b) => a.sort_order - b.sort_order);
         renderQuestionsList();
     } catch (error) {
         console.error('質問読み込みエラー:', error);
@@ -56,14 +54,11 @@ async function loadQuestions() {
 // 回答を読み込む
 async function loadResponses() {
     try {
-        const { data, error } = await supabase
-            .from('responses')
-            .select('*')
-            .order('created_at', { ascending: true });
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=getResponses`);
+        if (!response.ok) throw new Error('Failed to fetch responses');
 
-        if (error) throw error;
-
-        responses = data || [];
+        const data = await response.json();
+        responses = data.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         renderResults();
         updateTotalCount();
     } catch (error) {
@@ -71,20 +66,25 @@ async function loadResponses() {
     }
 }
 
-// リアルタイム購読設定
-function setupRealtimeSubscription() {
-    realtimeSubscription = supabase
-        .channel('responses-channel')
-        .on('postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'responses' },
-            (payload) => {
-                responses.push(payload.new);
-                renderResults();
-                updateTotalCount();
-                highlightNewResponse();
-            }
-        )
-        .subscribe();
+// ポーリング開始（5秒ごとにデータを取得）
+function startPolling() {
+    pollingInterval = setInterval(async () => {
+        const previousCount = responses.length;
+        await loadResponses();
+
+        // 新しい回答があればハイライト
+        if (responses.length > previousCount) {
+            highlightNewResponse();
+        }
+    }, POLLING_INTERVAL_MS);
+}
+
+// ポーリング停止
+function stopPolling() {
+    if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+    }
 }
 
 // 新しい回答のハイライト
@@ -312,9 +312,12 @@ async function addQuestion() {
     const maxOrder = Math.max(...questions.map(q => q.sort_order), 0);
 
     try {
-        const { data, error } = await supabase
-            .from('questions')
-            .insert({
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=addQuestion`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
                 question_text: text,
                 question_type: type,
                 options: options,
@@ -322,11 +325,11 @@ async function addQuestion() {
                 is_active: true,
                 sort_order: maxOrder + 1
             })
-            .select()
-            .single();
+        });
 
-        if (error) throw error;
+        if (!response.ok) throw new Error('Failed to add question');
 
+        const data = await response.json();
         questions.push(data);
         renderQuestionsList();
         renderResults();
@@ -386,12 +389,18 @@ function getTypeLabel(type) {
 // 質問の有効/無効切り替え
 async function toggleQuestionActive(id, isActive) {
     try {
-        const { error } = await supabase
-            .from('questions')
-            .update({ is_active: isActive })
-            .eq('id', id);
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=updateQuestion`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                id: id,
+                is_active: isActive
+            })
+        });
 
-        if (error) throw error;
+        if (!response.ok) throw new Error('Failed to update question');
 
         const question = questions.find(q => q.id === id);
         if (question) question.is_active = isActive;
@@ -409,16 +418,15 @@ async function deleteQuestion(id) {
     if (!confirm('この質問を削除しますか？関連する回答も削除されます。')) return;
 
     try {
-        // 関連する回答を先に削除
-        await supabase.from('responses').delete().eq('question_id', id);
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=deleteQuestion`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ id: id })
+        });
 
-        // 質問を削除
-        const { error } = await supabase
-            .from('questions')
-            .delete()
-            .eq('id', id);
-
-        if (error) throw error;
+        if (!response.ok) throw new Error('Failed to delete question');
 
         questions = questions.filter(q => q.id !== id);
         responses = responses.filter(r => r.question_id !== id);
@@ -452,7 +460,5 @@ function escapeHtml(text) {
 
 // ページ離脱時のクリーンアップ
 window.addEventListener('beforeunload', () => {
-    if (realtimeSubscription) {
-        supabase.removeChannel(realtimeSubscription);
-    }
+    stopPolling();
 });

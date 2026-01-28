@@ -12,15 +12,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 既に回答済みかチェック
 async function checkIfAlreadySubmitted() {
     try {
-        const { data, error } = await supabase
-            .from('responses')
-            .select('id')
-            .eq('session_id', SESSION_ID)
-            .limit(1);
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=getResponses`);
+        if (!response.ok) throw new Error('Failed to fetch responses');
 
-        if (error) throw error;
+        const data = await response.json();
+        const userResponses = data.filter(r => r.session_id === SESSION_ID);
 
-        if (data && data.length > 0) {
+        if (userResponses.length > 0) {
             showAlreadySubmitted();
             return true;
         }
@@ -34,15 +32,14 @@ async function checkIfAlreadySubmitted() {
 // 質問を読み込む
 async function loadQuestions() {
     try {
-        const { data, error } = await supabase
-            .from('questions')
-            .select('*')
-            .eq('is_active', true)
-            .order('sort_order', { ascending: true });
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=getQuestions`);
+        if (!response.ok) throw new Error('Failed to fetch questions');
 
-        if (error) throw error;
+        const data = await response.json();
+        questions = data
+            .filter(q => q.is_active)
+            .sort((a, b) => a.sort_order - b.sort_order);
 
-        questions = data || [];
         renderQuestions();
     } catch (error) {
         console.error('質問読み込みエラー:', error);
@@ -179,12 +176,16 @@ async function submitSurvey() {
         // 回答データ収集
         const responses = collectResponses();
 
-        // Supabaseに送信
-        const { error } = await supabase
-            .from('responses')
-            .insert(responses);
+        // Apps Scriptに送信
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=addResponse`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(responses)
+        });
 
-        if (error) throw error;
+        if (!response.ok) throw new Error('Failed to submit responses');
 
         showThankYou();
     } catch (error) {
