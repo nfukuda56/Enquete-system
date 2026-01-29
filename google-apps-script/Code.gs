@@ -15,6 +15,24 @@ function doGet(e) {
       return getQuestions();
     } else if (action === 'getResponses') {
       return getResponses();
+    } else if (action === 'addResponse' || action === 'addQuestion' ||
+               action === 'updateQuestion' || action === 'deleteQuestion') {
+      // データはクエリパラメータ 'data' から取得
+      const dataStr = e.parameter.data;
+      if (!dataStr) {
+        return createResponse({error: 'Missing data parameter'}, 400);
+      }
+      const data = JSON.parse(decodeURIComponent(dataStr));
+
+      if (action === 'addResponse') {
+        return addResponse(data);
+      } else if (action === 'addQuestion') {
+        return addQuestion(data);
+      } else if (action === 'updateQuestion') {
+        return updateQuestion(data);
+      } else if (action === 'deleteQuestion') {
+        return deleteQuestion(data);
+      }
     } else {
       return createResponse({error: 'Invalid action'}, 400);
     }
@@ -23,15 +41,23 @@ function doGet(e) {
   }
 }
 
-// POSTリクエスト処理
+// POSTリクエスト処理（管理機能用、非推奨）
+// GETでも処理できるよう、doGetで全て処理
 function doPost(e) {
+  // 下位互換性のため残すが、GETの使用を推奨
   const action = e.parameter.action;
   let data;
 
   try {
-    data = JSON.parse(e.postData.contents);
+    if (e.postData && e.postData.contents) {
+      data = JSON.parse(e.postData.contents);
+    } else if (e.parameter.data) {
+      data = JSON.parse(e.parameter.data);
+    } else {
+      return createResponse({error: 'Missing data'}, 400);
+    }
   } catch (error) {
-    return createResponse({error: 'Invalid JSON'}, 400);
+    return createResponse({error: 'Invalid JSON: ' + error.toString()}, 400);
   }
 
   try {

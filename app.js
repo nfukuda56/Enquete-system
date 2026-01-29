@@ -176,14 +176,9 @@ async function submitSurvey() {
         // 回答データ収集
         const responses = collectResponses();
 
-        // Apps Scriptに送信
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=addResponse`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(responses)
-        });
+        // Apps ScriptにGETリクエストで送信（CORS回避）
+        const dataStr = encodeURIComponent(JSON.stringify(responses));
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=addResponse&data=${dataStr}`);
 
         if (!response.ok) throw new Error('Failed to submit responses');
 

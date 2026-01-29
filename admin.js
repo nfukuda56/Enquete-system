@@ -312,20 +312,16 @@ async function addQuestion() {
     const maxOrder = Math.max(...questions.map(q => q.sort_order), 0);
 
     try {
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=addQuestion`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                question_text: text,
-                question_type: type,
-                options: options,
-                is_required: isRequired,
-                is_active: true,
-                sort_order: maxOrder + 1
-            })
-        });
+        const questionData = {
+            question_text: text,
+            question_type: type,
+            options: options,
+            is_required: isRequired,
+            is_active: true,
+            sort_order: maxOrder + 1
+        };
+        const dataStr = encodeURIComponent(JSON.stringify(questionData));
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=addQuestion&data=${dataStr}`);
 
         if (!response.ok) throw new Error('Failed to add question');
 
@@ -389,16 +385,12 @@ function getTypeLabel(type) {
 // 質問の有効/無効切り替え
 async function toggleQuestionActive(id, isActive) {
     try {
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=updateQuestion`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-                id: id,
-                is_active: isActive
-            })
-        });
+        const updateData = {
+            id: id,
+            is_active: isActive
+        };
+        const dataStr = encodeURIComponent(JSON.stringify(updateData));
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=updateQuestion&data=${dataStr}`);
 
         if (!response.ok) throw new Error('Failed to update question');
 
@@ -418,13 +410,9 @@ async function deleteQuestion(id) {
     if (!confirm('この質問を削除しますか？関連する回答も削除されます。')) return;
 
     try {
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=deleteQuestion`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ id: id })
-        });
+        const deleteData = { id: id };
+        const dataStr = encodeURIComponent(JSON.stringify(deleteData));
+        const response = await fetch(`${APPS_SCRIPT_URL}?action=deleteQuestion&data=${dataStr}`);
 
         if (!response.ok) throw new Error('Failed to delete question');
 

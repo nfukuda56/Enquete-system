@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(git commit -m \"$\\(cat <<''EOF''\nAdd real-time seminar survey system with Supabase\n\n- Participant survey page with multiple question types \\(single/multiple choice, text, rating\\)\n- Admin dashboard with real-time results and chart visualization\n- Question management functionality\n- Supabase integration for data storage and real-time updates\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(git add:*)"
     ]
   }
 }
