@@ -9,6 +9,7 @@ const SPREADSHEET_ID = 'YOUR_SPREADSHEET_ID_HERE';
 // GETリクエスト処理
 function doGet(e) {
   const action = e.parameter.action;
+  Logger.log('doGet called with action: ' + action);
 
   try {
     if (action === 'getQuestions') {
@@ -19,10 +20,17 @@ function doGet(e) {
                action === 'updateQuestion' || action === 'deleteQuestion') {
       // データはクエリパラメータ 'data' から取得
       const dataStr = e.parameter.data;
+      Logger.log('Received data parameter: ' + (dataStr ? dataStr.substring(0, 100) : 'null'));
+
       if (!dataStr) {
+        Logger.log('ERROR: Missing data parameter');
         return createResponse({error: 'Missing data parameter'}, 400);
       }
-      const data = JSON.parse(decodeURIComponent(dataStr));
+
+      const decodedStr = decodeURIComponent(dataStr);
+      Logger.log('Decoded data: ' + decodedStr.substring(0, 200));
+
+      const data = JSON.parse(decodedStr);
 
       if (action === 'addResponse') {
         return addResponse(data);
@@ -34,9 +42,11 @@ function doGet(e) {
         return deleteQuestion(data);
       }
     } else {
+      Logger.log('ERROR: Invalid action - ' + action);
       return createResponse({error: 'Invalid action'}, 400);
     }
   } catch (error) {
+    Logger.log('ERROR in doGet: ' + error.toString());
     return createResponse({error: error.toString()}, 500);
   }
 }
@@ -141,30 +151,45 @@ function getResponses() {
 
 // 回答追加
 function addResponse(data) {
-  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
-  const sheet = ss.getSheetByName('responses');
+  try {
+    Logger.log('addResponse called with data: ' + JSON.stringify(data));
 
-  if (!sheet) {
-    return createResponse({error: 'responses sheet not found'}, 404);
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName('responses');
+
+    if (!sheet) {
+      Logger.log('ERROR: responses sheet not found');
+      return createResponse({error: 'responses sheet not found'}, 404);
+    }
+
+    // 複数回答を一括追加
+    const responses = Array.isArray(data) ? data : [data];
+    Logger.log('Processing ' + responses.length + ' responses');
+
+    responses.forEach((response, index) => {
+      // 現在の最終行を取得（ヘッダー含む）
+      const lastRow = sheet.getLastRow();
+      // IDは最終行番号（ヘッダーを除く）
+      const id = lastRow; // ヘッダーが1行目なので、lastRowがそのままIDになる
+
+      Logger.log('Adding response ' + (index + 1) + ' with ID: ' + id);
+
+      sheet.appendRow([
+        id,
+        response.question_id,
+        response.session_id,
+        response.answer,
+        response.created_at || new Date().toISOString()
+      ]);
+    });
+
+    Logger.log('Successfully added ' + responses.length + ' responses');
+    return createResponse({success: true, count: responses.length});
+
+  } catch (error) {
+    Logger.log('ERROR in addResponse: ' + error.toString());
+    return createResponse({error: 'Failed to add response: ' + error.toString()}, 500);
   }
-
-  // 複数回答を一括追加
-  const responses = Array.isArray(data) ? data : [data];
-
-  responses.forEach(response => {
-    const lastRow = sheet.getLastRow();
-    const id = lastRow > 0 ? lastRow : 1;
-
-    sheet.appendRow([
-      id,
-      response.question_id,
-      response.session_id,
-      response.answer,
-      response.created_at || new Date().toISOString()
-    ]);
-  });
-
-  return createResponse({success: true, count: responses.length});
 }
 
 // 質問追加

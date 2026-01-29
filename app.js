@@ -175,12 +175,24 @@ async function submitSurvey() {
 
         // 回答データ収集
         const responses = collectResponses();
+        console.log('送信する回答データ:', responses);
 
         // Apps ScriptにGETリクエストで送信（CORS回避）
         const dataStr = encodeURIComponent(JSON.stringify(responses));
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=addResponse&data=${dataStr}`);
+        console.log('エンコード後のデータ長:', dataStr.length);
 
-        if (!response.ok) throw new Error('Failed to submit responses');
+        const url = `${APPS_SCRIPT_URL}?action=addResponse&data=${dataStr}`;
+        console.log('リクエストURL:', url.substring(0, 200) + '...');
+
+        const response = await fetch(url);
+        console.log('レスポンスステータス:', response.status);
+
+        const result = await response.json();
+        console.log('レスポンス内容:', result);
+
+        if (!response.ok) {
+            throw new Error('Failed to submit responses: ' + JSON.stringify(result));
+        }
 
         showThankYou();
     } catch (error) {
