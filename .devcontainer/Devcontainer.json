@@ -1,0 +1,6 @@
+{
+  "name": "GitHub Pages with Claude Code",
+  "image": "mcr.microsoft.com/devcontainers/javascript-node:1-20-bullseye",
+  "postCreateCommand": "npm install -g npm@latest && npm install -g @anthropic-ai/claude-code",
+  "remoteUser": "node"
+}
