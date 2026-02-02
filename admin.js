@@ -618,6 +618,11 @@ async function addQuestion() {
     const optionsText = document.getElementById('question-options').value;
     const isRequired = document.getElementById('question-required').checked;
 
+    if (!text) {
+        alert('質問文を入力してください。');
+        return;
+    }
+
     let options = null;
     if (type === 'single' || type === 'multiple') {
         options = optionsText.split('\n').map(o => o.trim()).filter(o => o);
@@ -627,7 +632,7 @@ async function addQuestion() {
         }
     }
 
-    const maxOrder = Math.max(...questions.map(q => q.sort_order), 0);
+    const maxOrder = questions.length > 0 ? Math.max(...questions.map(q => q.sort_order)) + 1 : 1;
 
     try {
         const questionData = {
@@ -637,8 +642,10 @@ async function addQuestion() {
             options: options,
             is_required: isRequired,
             is_active: true,
-            sort_order: maxOrder + 1
+            sort_order: maxOrder
         };
+
+        console.log('質問データ:', questionData);
 
         const { data, error } = await supabaseClient
             .from('questions')
@@ -646,7 +653,10 @@ async function addQuestion() {
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            console.error('Supabaseエラー詳細:', error);
+            throw error;
+        }
 
         questions.push(data);
         renderQuestionsList();
@@ -659,7 +669,7 @@ async function addQuestion() {
         alert('質問を追加しました。');
     } catch (error) {
         console.error('質問追加エラー:', error);
-        alert('質問の追加に失敗しました。');
+        alert('質問の追加に失敗しました。\nエラー: ' + (error.message || error));
     }
 }
 
