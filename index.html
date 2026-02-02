@@ -10,6 +10,7 @@
     <div class="container">
         <header>
             <h1>セミナーアンケート</h1>
+            <p class="event-name" id="event-name"></p>
             <p class="subtitle">ご参加ありがとうございます。以下のアンケートにご回答ください。</p>
         </header>
 
@@ -43,6 +44,16 @@
                 <button class="btn btn-secondary" onclick="resetAndResubmit()">
                     もう一度回答する
                 </button>
+            </div>
+
+            <div id="no-event" class="error-message" style="display: none;">
+                <h2>イベントが指定されていません</h2>
+                <p>正しいURLからアクセスしてください。</p>
+            </div>
+
+            <div id="event-not-found" class="error-message" style="display: none;">
+                <h2>イベントが見つかりません</h2>
+                <p>指定されたイベントは存在しないか、終了しています。</p>
             </div>
 
             <div id="error-message" class="error-message" style="display: none;">

@@ -1,21 +1,87 @@
 // 参加者用アンケートアプリケーション
 
 let questions = [];
+let eventId = null;
+let eventInfo = null;
+
+// URLパラメータからイベントID取得
+function getEventIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('event');
+    return id ? parseInt(id) : null;
+}
 
 // 初期化
 document.addEventListener('DOMContentLoaded', async () => {
-    await checkIfAlreadySubmitted();
+    eventId = getEventIdFromUrl();
+
+    if (!eventId) {
+        showNoEvent();
+        return;
+    }
+
+    // イベント情報を取得
+    const eventExists = await loadEventInfo();
+    if (!eventExists) {
+        showEventNotFound();
+        return;
+    }
+
+    // 回答済みチェック
+    const alreadySubmitted = await checkIfAlreadySubmitted();
+    if (alreadySubmitted) return;
+
+    // 質問読み込み
     await loadQuestions();
     setupFormSubmission();
 });
 
-// 既に回答済みかチェック
+// イベント情報を読み込む
+async function loadEventInfo() {
+    try {
+        const { data, error } = await supabaseClient
+            .from('events')
+            .select('*')
+            .eq('id', eventId)
+            .eq('is_active', true)
+            .single();
+
+        if (error || !data) {
+            return false;
+        }
+
+        eventInfo = data;
+        document.getElementById('event-name').textContent = eventInfo.name;
+        return true;
+    } catch (error) {
+        console.error('イベント読み込みエラー:', error);
+        return false;
+    }
+}
+
+// 既に回答済みかチェック（イベント＋セッションで確認）
 async function checkIfAlreadySubmitted() {
     try {
+        // このイベントの質問IDを取得
+        const { data: questionData, error: questionError } = await supabaseClient
+            .from('questions')
+            .select('id')
+            .eq('event_id', eventId);
+
+        if (questionError) throw questionError;
+
+        if (!questionData || questionData.length === 0) {
+            return false;
+        }
+
+        const questionIds = questionData.map(q => q.id);
+
+        // これらの質問に対する回答があるかチェック
         const { data, error } = await supabaseClient
             .from('responses')
             .select('id')
             .eq('session_id', SESSION_ID)
+            .in('question_id', questionIds)
             .limit(1);
 
         if (error) throw error;
@@ -31,12 +97,13 @@ async function checkIfAlreadySubmitted() {
     }
 }
 
-// 質問を読み込む
+// 質問を読み込む（イベントフィルタ）
 async function loadQuestions() {
     try {
         const { data, error } = await supabaseClient
             .from('questions')
             .select('*')
+            .eq('event_id', eventId)
             .eq('is_active', true)
             .order('sort_order', { ascending: true });
 
@@ -272,6 +339,16 @@ function showThankYou() {
 function showAlreadySubmitted() {
     document.getElementById('loading').style.display = 'none';
     document.getElementById('already-submitted').style.display = 'block';
+}
+
+function showNoEvent() {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('no-event').style.display = 'block';
+}
+
+function showEventNotFound() {
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('event-not-found').style.display = 'block';
 }
 
 function showError(message) {

@@ -1,17 +1,22 @@
 // 管理者用アプリケーション
 
+let events = [];
 let questions = [];
 let responses = [];
 let charts = {};
 let realtimeChannel = null;
+let selectedEventId = null;
+
+// GitHub Pages URL（QRコード用）
+const BASE_URL = 'https://nfukuda56.github.io/Enquete-system/';
 
 // 初期化
 document.addEventListener('DOMContentLoaded', async () => {
     setupTabs();
-    await loadQuestions();
-    await loadResponses();
-    startRealtimeSubscription();
+    setupEventForms();
     setupQuestionForm();
+    await loadEvents();
+    startRealtimeSubscription();
 });
 
 // タブ切り替え
@@ -36,13 +41,219 @@ function setupTabs() {
     });
 }
 
-// 質問を読み込む
-async function loadQuestions() {
+// ========== イベント関連 ==========
+
+// イベントフォーム設定
+function setupEventForms() {
+    // タブ内のフォーム
+    document.getElementById('add-event-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await addEvent('event-name', 'event-date', 'event-description');
+        e.target.reset();
+    });
+
+    // モーダルのフォーム
+    document.getElementById('modal-event-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        await addEvent('modal-event-name', 'modal-event-date', 'modal-event-description');
+        e.target.reset();
+        hideEventModal();
+    });
+}
+
+// イベント読み込み
+async function loadEvents() {
     try {
         const { data, error } = await supabaseClient
+            .from('events')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) throw error;
+
+        events = data || [];
+        renderEventSelect();
+        renderEventsList();
+    } catch (error) {
+        console.error('イベント読み込みエラー:', error);
+    }
+}
+
+// イベント選択ドロップダウン描画
+function renderEventSelect() {
+    const select = document.getElementById('event-select');
+    select.innerHTML = '<option value="">-- イベントを選択 --</option>' +
+        events.map(e => `
+            <option value="${e.id}" ${e.id === selectedEventId ? 'selected' : ''}>
+                ${escapeHtml(e.name)}${e.event_date ? ` (${e.event_date})` : ''}
+            </option>
+        `).join('');
+}
+
+// イベント選択
+async function selectEvent(eventId) {
+    selectedEventId = eventId ? parseInt(eventId) : null;
+
+    // QRコードセクション表示/非表示
+    const qrSection = document.getElementById('qr-section');
+    if (selectedEventId) {
+        qrSection.style.display = 'flex';
+        generateQRCode();
+        document.getElementById('add-question-btn').disabled = false;
+        document.getElementById('question-event-notice').style.display = 'none';
+    } else {
+        qrSection.style.display = 'none';
+        document.getElementById('add-question-btn').disabled = true;
+        document.getElementById('question-event-notice').style.display = 'block';
+    }
+
+    // 質問と回答を再読み込み
+    await loadQuestions();
+    await loadResponses();
+}
+
+// QRコード生成
+function generateQRCode() {
+    const url = `${BASE_URL}?event=${selectedEventId}`;
+    const qrContainer = document.getElementById('qr-code');
+    const qrUrlElement = document.getElementById('qr-url');
+
+    qrContainer.innerHTML = '';
+    QRCode.toCanvas(qrContainer, url, { width: 150 }, (error) => {
+        if (error) console.error('QRコード生成エラー:', error);
+    });
+
+    qrUrlElement.textContent = url;
+}
+
+// URLコピー
+function copyEventUrl() {
+    const url = `${BASE_URL}?event=${selectedEventId}`;
+    navigator.clipboard.writeText(url).then(() => {
+        alert('URLをコピーしました');
+    }).catch(err => {
+        console.error('コピーエラー:', err);
+        prompt('URLをコピーしてください:', url);
+    });
+}
+
+// イベント追加
+async function addEvent(nameId, dateId, descId) {
+    const name = document.getElementById(nameId).value.trim();
+    const date = document.getElementById(dateId).value || null;
+    const description = document.getElementById(descId).value.trim() || null;
+
+    if (!name) {
+        alert('イベント名を入力してください。');
+        return;
+    }
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('events')
+            .insert([{ name, event_date: date, description }])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        events.unshift(data);
+        renderEventSelect();
+        renderEventsList();
+
+        // 新しいイベントを選択
+        document.getElementById('event-select').value = data.id;
+        await selectEvent(data.id);
+
+        alert('イベントを作成しました。');
+    } catch (error) {
+        console.error('イベント追加エラー:', error);
+        alert('イベントの追加に失敗しました。');
+    }
+}
+
+// イベント削除
+async function deleteEvent(id) {
+    if (!confirm('このイベントを削除しますか？関連する質問と回答もすべて削除されます。')) return;
+
+    try {
+        const { error } = await supabaseClient
+            .from('events')
+            .delete()
+            .eq('id', id);
+
+        if (error) throw error;
+
+        events = events.filter(e => e.id !== id);
+        renderEventSelect();
+        renderEventsList();
+
+        // 削除されたイベントが選択中だった場合
+        if (selectedEventId === id) {
+            selectedEventId = null;
+            document.getElementById('event-select').value = '';
+            await selectEvent(null);
+        }
+
+        alert('イベントを削除しました。');
+    } catch (error) {
+        console.error('イベント削除エラー:', error);
+        alert('削除に失敗しました。');
+    }
+}
+
+// イベントリスト描画
+function renderEventsList() {
+    const container = document.getElementById('events-list');
+
+    if (events.length === 0) {
+        container.innerHTML = '<p class="no-data">イベントがありません</p>';
+        return;
+    }
+
+    container.innerHTML = events.map(e => `
+        <div class="event-list-item">
+            <div class="event-info">
+                <span class="event-name">${escapeHtml(e.name)}</span>
+                ${e.event_date ? `<span class="event-date">${e.event_date}</span>` : ''}
+                ${e.description ? `<p class="event-description">${escapeHtml(e.description)}</p>` : ''}
+            </div>
+            <div class="event-actions">
+                <button class="btn btn-sm btn-danger" onclick="deleteEvent(${e.id})">削除</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+// モーダル表示/非表示
+function showEventModal() {
+    document.getElementById('event-modal').style.display = 'flex';
+}
+
+function hideEventModal() {
+    document.getElementById('event-modal').style.display = 'none';
+}
+
+// ========== 質問関連 ==========
+
+// 質問を読み込む（イベントフィルタ）
+async function loadQuestions() {
+    try {
+        let query = supabaseClient
             .from('questions')
             .select('*')
             .order('sort_order', { ascending: true });
+
+        if (selectedEventId) {
+            query = query.eq('event_id', selectedEventId);
+        } else {
+            // イベント未選択時は空
+            questions = [];
+            renderQuestionsList();
+            return;
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
@@ -53,12 +264,22 @@ async function loadQuestions() {
     }
 }
 
-// 回答を読み込む
+// 回答を読み込む（イベントの質問に紐づく回答のみ）
 async function loadResponses() {
     try {
+        if (!selectedEventId || questions.length === 0) {
+            responses = [];
+            renderResults();
+            updateTotalCount();
+            return;
+        }
+
+        const questionIds = questions.map(q => q.id);
+
         const { data, error } = await supabaseClient
             .from('responses')
             .select('*')
+            .in('question_id', questionIds)
             .order('created_at', { ascending: true });
 
         if (error) throw error;
@@ -78,19 +299,30 @@ function startRealtimeSubscription() {
         .on('postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'responses' },
             (payload) => {
-                // 新しい回答を追加
-                responses.push(payload.new);
-                renderResults();
-                updateTotalCount();
-                highlightNewResponse();
+                // 選択中イベントの質問への回答のみ処理
+                const questionIds = questions.map(q => q.id);
+                if (questionIds.includes(payload.new.question_id)) {
+                    responses.push(payload.new);
+                    renderResults();
+                    updateTotalCount();
+                    highlightNewResponse();
+                }
             }
         )
         .on('postgres_changes',
             { event: '*', schema: 'public', table: 'questions' },
+            async (payload) => {
+                // 選択中イベントの質問変更のみ処理
+                if (payload.new?.event_id === selectedEventId || payload.old?.event_id === selectedEventId) {
+                    await loadQuestions();
+                    await loadResponses();
+                }
+            }
+        )
+        .on('postgres_changes',
+            { event: '*', schema: 'public', table: 'events' },
             async () => {
-                // 質問が変更されたら再読み込み
-                await loadQuestions();
-                renderResults();
+                await loadEvents();
             }
         )
         .subscribe();
@@ -122,6 +354,13 @@ function renderResults() {
     const container = document.getElementById('results-container');
     const loading = document.getElementById('loading');
 
+    if (!selectedEventId) {
+        container.innerHTML = '<p class="no-data">イベントを選択してください。</p>';
+        loading.style.display = 'none';
+        container.style.display = 'block';
+        return;
+    }
+
     if (questions.length === 0) {
         container.innerHTML = '<p class="no-data">まだ質問が登録されていません。</p>';
         loading.style.display = 'none';
@@ -135,7 +374,7 @@ function renderResults() {
         html += generateResultCard(question, questionResponses, index);
     });
 
-    container.innerHTML = html;
+    container.innerHTML = html || '<p class="no-data">表示する質問がありません。</p>';
     loading.style.display = 'none';
     container.style.display = 'block';
 
@@ -312,6 +551,11 @@ function toggleOptionsInput() {
 
 // 質問追加
 async function addQuestion() {
+    if (!selectedEventId) {
+        alert('先にイベントを選択してください。');
+        return;
+    }
+
     const text = document.getElementById('question-text').value.trim();
     const type = document.getElementById('question-type').value;
     const optionsText = document.getElementById('question-options').value;
@@ -330,6 +574,7 @@ async function addQuestion() {
 
     try {
         const questionData = {
+            event_id: selectedEventId,
             question_text: text,
             question_type: type,
             options: options,
@@ -365,8 +610,13 @@ async function addQuestion() {
 function renderQuestionsList() {
     const container = document.getElementById('questions-list');
 
+    if (!selectedEventId) {
+        container.innerHTML = '<p class="no-data">イベントを選択してください</p>';
+        return;
+    }
+
     if (questions.length === 0) {
-        container.innerHTML = '<p class="no-questions">登録された質問がありません</p>';
+        container.innerHTML = '<p class="no-data">登録された質問がありません</p>';
         return;
     }
 
@@ -428,7 +678,6 @@ async function deleteQuestion(id) {
     if (!confirm('この質問を削除しますか？関連する回答も削除されます。')) return;
 
     try {
-        // ON DELETE CASCADE により関連する回答も自動削除される
         const { error } = await supabaseClient
             .from('questions')
             .delete()
