@@ -40,11 +40,18 @@ function setupTabs() {
 // 質問を読み込む
 async function loadQuestions() {
     try {
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=getQuestions`);
-        if (!response.ok) throw new Error('Failed to fetch questions');
+        console.log('質問を読み込み中...');
+        const { data, error } = await supabase
+            .from('questions')
+            .select('*')
+            .order('sort_order', { ascending: true });
 
-        const data = await response.json();
-        questions = data.sort((a, b) => a.sort_order - b.sort_order);
+        console.log('Supabase questions:', data, 'error:', error);
+
+        if (error) throw error;
+
+        questions = data || [];
+        console.log('取得した質問数:', questions.length);
         renderQuestionsList();
     } catch (error) {
         console.error('質問読み込みエラー:', error);
@@ -54,11 +61,18 @@ async function loadQuestions() {
 // 回答を読み込む
 async function loadResponses() {
     try {
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=getResponses`);
-        if (!response.ok) throw new Error('Failed to fetch responses');
+        console.log('回答を読み込み中...');
+        const { data, error } = await supabase
+            .from('responses')
+            .select('*')
+            .order('created_at', { ascending: true });
 
-        const data = await response.json();
-        responses = data.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        console.log('Supabase responses:', data, 'error:', error);
+
+        if (error) throw error;
+
+        responses = data || [];
+        console.log('取得した回答数:', responses.length);
         renderResults();
         updateTotalCount();
     } catch (error) {
@@ -320,12 +334,15 @@ async function addQuestion() {
             is_active: true,
             sort_order: maxOrder + 1
         };
-        const dataStr = encodeURIComponent(JSON.stringify(questionData));
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=addQuestion&data=${dataStr}`);
 
-        if (!response.ok) throw new Error('Failed to add question');
+        const { data, error } = await supabase
+            .from('questions')
+            .insert([questionData])
+            .select()
+            .single();
 
-        const data = await response.json();
+        if (error) throw error;
+
         questions.push(data);
         renderQuestionsList();
         renderResults();
@@ -385,14 +402,12 @@ function getTypeLabel(type) {
 // 質問の有効/無効切り替え
 async function toggleQuestionActive(id, isActive) {
     try {
-        const updateData = {
-            id: id,
-            is_active: isActive
-        };
-        const dataStr = encodeURIComponent(JSON.stringify(updateData));
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=updateQuestion&data=${dataStr}`);
+        const { error } = await supabase
+            .from('questions')
+            .update({ is_active: isActive })
+            .eq('id', id);
 
-        if (!response.ok) throw new Error('Failed to update question');
+        if (error) throw error;
 
         const question = questions.find(q => q.id === id);
         if (question) question.is_active = isActive;
@@ -410,11 +425,13 @@ async function deleteQuestion(id) {
     if (!confirm('この質問を削除しますか？関連する回答も削除されます。')) return;
 
     try {
-        const deleteData = { id: id };
-        const dataStr = encodeURIComponent(JSON.stringify(deleteData));
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=deleteQuestion&data=${dataStr}`);
+        // ON DELETE CASCADE により関連する回答も自動削除される
+        const { error } = await supabase
+            .from('questions')
+            .delete()
+            .eq('id', id);
 
-        if (!response.ok) throw new Error('Failed to delete question');
+        if (error) throw error;
 
         questions = questions.filter(q => q.id !== id);
         responses = responses.filter(r => r.question_id !== id);

@@ -12,13 +12,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 既に回答済みかチェック
 async function checkIfAlreadySubmitted() {
     try {
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=getResponses`);
-        if (!response.ok) throw new Error('Failed to fetch responses');
+        const { data, error } = await supabase
+            .from('responses')
+            .select('id')
+            .eq('session_id', SESSION_ID)
+            .limit(1);
 
-        const data = await response.json();
-        const userResponses = data.filter(r => r.session_id === SESSION_ID);
+        if (error) throw error;
 
-        if (userResponses.length > 0) {
+        if (data && data.length > 0) {
             showAlreadySubmitted();
             return true;
         }
@@ -32,14 +34,15 @@ async function checkIfAlreadySubmitted() {
 // 質問を読み込む
 async function loadQuestions() {
     try {
-        const response = await fetch(`${APPS_SCRIPT_URL}?action=getQuestions`);
-        if (!response.ok) throw new Error('Failed to fetch questions');
+        const { data, error } = await supabase
+            .from('questions')
+            .select('*')
+            .eq('is_active', true)
+            .order('sort_order', { ascending: true });
 
-        const data = await response.json();
-        questions = data
-            .filter(q => q.is_active)
-            .sort((a, b) => a.sort_order - b.sort_order);
+        if (error) throw error;
 
+        questions = data || [];
         renderQuestions();
     } catch (error) {
         console.error('質問読み込みエラー:', error);
@@ -174,26 +177,24 @@ async function submitSurvey() {
         }
 
         // 回答データ収集
-        const responses = collectResponses();
-        console.log('送信する回答データ:', responses);
+        const responsesData = collectResponses();
+        console.log('送信する回答データ:', responsesData);
 
-        // Apps ScriptにGETリクエストで送信（CORS回避）
-        const dataStr = encodeURIComponent(JSON.stringify(responses));
-        console.log('エンコード後のデータ長:', dataStr.length);
+        // Supabaseに送信
+        console.log('Supabaseに送信中...');
+        const { data, error } = await supabase
+            .from('responses')
+            .insert(responsesData)
+            .select();
 
-        const url = `${APPS_SCRIPT_URL}?action=addResponse&data=${dataStr}`;
-        console.log('リクエストURL:', url.substring(0, 200) + '...');
+        console.log('Supabase insert結果 - data:', data, 'error:', error);
 
-        const response = await fetch(url);
-        console.log('レスポンスステータス:', response.status);
-
-        const result = await response.json();
-        console.log('レスポンス内容:', result);
-
-        if (!response.ok) {
-            throw new Error('Failed to submit responses: ' + JSON.stringify(result));
+        if (error) {
+            console.error('Supabaseエラー詳細:', error.message, error.details, error.hint);
+            throw error;
         }
 
+        console.log('送信成功:', data);
         showThankYou();
     } catch (error) {
         console.error('送信エラー:', error);
@@ -263,8 +264,7 @@ function collectResponses() {
             responses.push({
                 question_id: question.id,
                 session_id: SESSION_ID,
-                answer: typeof answer === 'object' ? JSON.stringify(answer) : answer,
-                created_at: new Date().toISOString()
+                answer: typeof answer === 'object' ? JSON.stringify(answer) : answer
             });
         }
     });
