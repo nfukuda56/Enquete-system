@@ -269,11 +269,14 @@ async function submitAnswer() {
         // 画像の場合はリサイズしてStorageにアップロード
         if (question.question_type === 'image' && answer instanceof File) {
             submitBtn.textContent = '画像を処理中...';
+            console.log('画像ファイル:', answer.name, answer.size, 'bytes');
 
             // リサイズ処理（最大800x800、JPEG品質80%）
             const resizedBlob = await resizeImage(answer, 800, 800, 0.8);
+            console.log('リサイズ後:', resizedBlob.size, 'bytes');
 
             const fileName = `${eventId}/${question.id}/${SESSION_ID}.jpg`;
+            console.log('アップロード先:', fileName);
 
             submitBtn.textContent = 'アップロード中...';
 
@@ -285,7 +288,12 @@ async function submitAnswer() {
                     upsert: true
                 });
 
-            if (error) throw error;
+            if (error) {
+                console.error('Storageアップロードエラー:', error);
+                throw new Error('画像のアップロードに失敗しました: ' + error.message);
+            }
+
+            console.log('アップロード成功:', data);
 
             // 公開URLを取得（キャッシュ回避のためタイムスタンプ付与）
             const { data: urlData } = supabaseClient.storage
@@ -293,6 +301,7 @@ async function submitAnswer() {
                 .getPublicUrl(fileName);
 
             answer = urlData.publicUrl + '?t=' + Date.now();
+            console.log('公開URL:', answer);
         }
 
         // 既存の回答を確認して更新または挿入（upsert）
@@ -324,7 +333,7 @@ async function submitAnswer() {
         showQuestion(currentQuestionIndex + 1);
     } catch (error) {
         console.error('送信エラー:', error);
-        alert('送信に失敗しました。もう一度お試しください。');
+        alert('送信に失敗しました。\n' + (error.message || error));
     } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = '回答を送信';
