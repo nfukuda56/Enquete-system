@@ -25,24 +25,6 @@
         </header>
 
         <main>
-            <!-- イベント選択エリア -->
-            <div class="event-selector">
-                <div class="event-select-group">
-                    <label for="event-select">イベント選択:</label>
-                    <select id="event-select" onchange="selectEvent(this.value)">
-                        <option value="">-- イベントを選択 --</option>
-                    </select>
-                    <button class="btn btn-primary btn-sm" onclick="showEventModal()">+ 新規作成</button>
-                </div>
-                <div class="qr-section" id="qr-section" style="display: none;">
-                    <div class="qr-code" id="qr-code"></div>
-                    <div class="qr-info">
-                        <p class="qr-url" id="qr-url"></p>
-                        <button class="btn btn-secondary btn-sm" onclick="copyEventUrl()">URLをコピー</button>
-                    </div>
-                </div>
-            </div>
-
             <div class="admin-tabs">
                 <button class="tab-btn active" data-tab="results">回答結果</button>
                 <button class="tab-btn" data-tab="questions">質問管理</button>
@@ -110,6 +92,24 @@
 
             <!-- イベント管理タブ -->
             <div id="events-tab" class="tab-content" style="display: none;">
+                <!-- イベント選択・QRコードエリア -->
+                <div class="event-selector">
+                    <h2>イベント選択</h2>
+                    <div class="event-select-group">
+                        <select id="event-select" onchange="selectEvent(this.value)">
+                            <option value="">-- イベントを選択 --</option>
+                        </select>
+                    </div>
+                    <div class="qr-section" id="qr-section" style="display: none;">
+                        <div class="qr-code" id="qr-code"></div>
+                        <div class="qr-info">
+                            <p class="qr-label">参加者用URL:</p>
+                            <p class="qr-url" id="qr-url"></p>
+                            <button class="btn btn-secondary btn-sm" onclick="copyEventUrl()">URLをコピー</button>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="event-form-container">
                     <h2>新しいイベントを作成</h2>
                     <form id="add-event-form">
@@ -146,34 +146,6 @@
         <footer>
             <p>&copy; 2024 セミナーアンケートシステム - 管理画面</p>
         </footer>
-    </div>
-
-    <!-- イベント作成モーダル -->
-    <div id="event-modal" class="modal" style="display: none;">
-        <div class="modal-content">
-            <span class="modal-close" onclick="hideEventModal()">&times;</span>
-            <h2>新しいイベントを作成</h2>
-            <form id="modal-event-form">
-                <div class="form-group">
-                    <label for="modal-event-name">イベント名 *</label>
-                    <input type="text" id="modal-event-name" required
-                           placeholder="例: 第1回 技術セミナー">
-                </div>
-
-                <div class="form-group">
-                    <label for="modal-event-date">開催日</label>
-                    <input type="date" id="modal-event-date">
-                </div>
-
-                <div class="form-group">
-                    <label for="modal-event-description">説明</label>
-                    <textarea id="modal-event-description" rows="3"
-                              placeholder="イベントの説明（任意）"></textarea>
-                </div>
-
-                <button type="submit" class="btn btn-primary">作成</button>
-            </form>
-        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>

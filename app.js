@@ -1,6 +1,7 @@
-// 参加者用アンケートアプリケーション
+// 参加者用アンケートアプリケーション（一問一答形式）
 
 let questions = [];
+let currentQuestionIndex = 0;
 let eventId = null;
 let eventInfo = null;
 
@@ -27,13 +28,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
-    // 回答済みチェック
-    const alreadySubmitted = await checkIfAlreadySubmitted();
-    if (alreadySubmitted) return;
-
     // 質問読み込み
     await loadQuestions();
-    setupFormSubmission();
 });
 
 // イベント情報を読み込む
@@ -59,45 +55,7 @@ async function loadEventInfo() {
     }
 }
 
-// 既に回答済みかチェック（イベント＋セッションで確認）
-async function checkIfAlreadySubmitted() {
-    try {
-        // このイベントの質問IDを取得
-        const { data: questionData, error: questionError } = await supabaseClient
-            .from('questions')
-            .select('id')
-            .eq('event_id', eventId);
-
-        if (questionError) throw questionError;
-
-        if (!questionData || questionData.length === 0) {
-            return false;
-        }
-
-        const questionIds = questionData.map(q => q.id);
-
-        // これらの質問に対する回答があるかチェック
-        const { data, error } = await supabaseClient
-            .from('responses')
-            .select('id')
-            .eq('session_id', SESSION_ID)
-            .in('question_id', questionIds)
-            .limit(1);
-
-        if (error) throw error;
-
-        if (data && data.length > 0) {
-            showAlreadySubmitted();
-            return true;
-        }
-        return false;
-    } catch (error) {
-        console.error('回答チェックエラー:', error);
-        return false;
-    }
-}
-
-// 質問を読み込む（イベントフィルタ）
+// 質問を読み込む
 async function loadQuestions() {
     try {
         const { data, error } = await supabaseClient
@@ -110,37 +68,43 @@ async function loadQuestions() {
         if (error) throw error;
 
         questions = data || [];
-        renderQuestions();
+
+        if (questions.length === 0) {
+            showNoQuestions();
+            return;
+        }
+
+        // 質問表示開始
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('question-area').style.display = 'block';
+        showQuestion(0);
     } catch (error) {
         console.error('質問読み込みエラー:', error);
-        showError('質問の読み込みに失敗しました。ページを再読み込みしてください。');
+        showError('質問の読み込みに失敗しました。');
     }
 }
 
 // 質問を表示
-function renderQuestions() {
-    const container = document.getElementById('questions-container');
-    const loading = document.getElementById('loading');
-    const form = document.getElementById('survey-form');
-
-    if (questions.length === 0) {
-        container.innerHTML = '<p class="no-questions">現在、回答可能なアンケートはありません。</p>';
-        loading.style.display = 'none';
-        form.style.display = 'block';
-        document.getElementById('submit-btn').style.display = 'none';
+function showQuestion(index) {
+    if (index >= questions.length) {
+        showComplete();
         return;
     }
 
-    container.innerHTML = questions.map((q, index) => generateQuestionHTML(q, index)).join('');
-    loading.style.display = 'none';
-    form.style.display = 'block';
+    currentQuestionIndex = index;
+    const question = questions[index];
+
+    // プログレス更新
+    document.getElementById('progress-text').textContent = `質問 ${index + 1} / ${questions.length}`;
+    document.getElementById('progress-fill').style.width = `${((index + 1) / questions.length) * 100}%`;
+
+    // 質問HTML生成
+    const html = generateQuestionHTML(question);
+    document.getElementById('current-question').innerHTML = html;
 }
 
 // 質問のHTML生成
-function generateQuestionHTML(question, index) {
-    const requiredMark = question.is_required ? '<span class="required">*</span>' : '';
-    const requiredAttr = question.is_required ? 'required' : '';
-
+function generateQuestionHTML(question) {
     let inputHTML = '';
 
     switch (question.question_type) {
@@ -151,7 +115,7 @@ function generateQuestionHTML(question, index) {
             inputHTML = generateMultipleChoiceHTML(question);
             break;
         case 'text':
-            inputHTML = generateTextInputHTML(question, requiredAttr);
+            inputHTML = generateTextInputHTML(question);
             break;
         case 'rating':
             inputHTML = generateRatingHTML(question);
@@ -162,8 +126,7 @@ function generateQuestionHTML(question, index) {
 
     return `
         <div class="question-card" data-question-id="${question.id}">
-            <div class="question-number">Q${index + 1}</div>
-            <div class="question-text">${escapeHtml(question.question_text)}${requiredMark}</div>
+            <div class="question-text">${escapeHtml(question.question_text)}</div>
             <div class="question-input">
                 ${inputHTML}
             </div>
@@ -174,10 +137,9 @@ function generateQuestionHTML(question, index) {
 // 単一選択
 function generateSingleChoiceHTML(question) {
     const options = question.options || [];
-    return options.map((option, i) => `
+    return options.map(option => `
         <label class="radio-label">
-            <input type="radio" name="q_${question.id}" value="${escapeHtml(option)}"
-                   ${question.is_required && i === 0 ? '' : ''}>
+            <input type="radio" name="answer" value="${escapeHtml(option)}">
             <span class="radio-custom"></span>
             ${escapeHtml(option)}
         </label>
@@ -189,7 +151,7 @@ function generateMultipleChoiceHTML(question) {
     const options = question.options || [];
     return options.map(option => `
         <label class="checkbox-label">
-            <input type="checkbox" name="q_${question.id}" value="${escapeHtml(option)}">
+            <input type="checkbox" name="answer" value="${escapeHtml(option)}">
             <span class="checkbox-custom"></span>
             ${escapeHtml(option)}
         </label>
@@ -197,10 +159,9 @@ function generateMultipleChoiceHTML(question) {
 }
 
 // 自由記述
-function generateTextInputHTML(question, requiredAttr) {
+function generateTextInputHTML(question) {
     return `
-        <textarea name="q_${question.id}" rows="4"
-                  placeholder="ご意見・ご感想をお書きください" ${requiredAttr}></textarea>
+        <textarea name="answer" rows="4" placeholder="ご意見・ご感想をお書きください"></textarea>
     `;
 }
 
@@ -211,7 +172,7 @@ function generateRatingHTML(question) {
         <div class="rating-container">
             ${[1, 2, 3, 4, 5].map(value => `
                 <label class="rating-label">
-                    <input type="radio" name="q_${question.id}" value="${value}">
+                    <input type="radio" name="answer" value="${value}">
                     <span class="rating-star" data-value="${value}">${value}</span>
                     <span class="rating-text">${labels[value - 1]}</span>
                 </label>
@@ -220,125 +181,101 @@ function generateRatingHTML(question) {
     `;
 }
 
-// フォーム送信設定
-function setupFormSubmission() {
-    const form = document.getElementById('survey-form');
-    form.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await submitSurvey();
-    });
-}
+// 回答を送信
+async function submitAnswer() {
+    const question = questions[currentQuestionIndex];
+    const answer = collectAnswer(question);
 
-// アンケート送信
-async function submitSurvey() {
+    if (answer === null) {
+        alert('回答を選択してください。');
+        return;
+    }
+
     const submitBtn = document.getElementById('submit-btn');
     submitBtn.disabled = true;
     submitBtn.textContent = '送信中...';
 
     try {
-        // バリデーション
-        if (!validateForm()) {
-            submitBtn.disabled = false;
-            submitBtn.textContent = '回答を送信';
-            return;
+        // 既存の回答を確認して更新または挿入（upsert）
+        const { data: existing } = await supabaseClient
+            .from('responses')
+            .select('id')
+            .eq('question_id', question.id)
+            .eq('session_id', SESSION_ID)
+            .single();
+
+        if (existing) {
+            // 更新
+            await supabaseClient
+                .from('responses')
+                .update({ answer: answer })
+                .eq('id', existing.id);
+        } else {
+            // 挿入
+            await supabaseClient
+                .from('responses')
+                .insert([{
+                    question_id: question.id,
+                    session_id: SESSION_ID,
+                    answer: answer
+                }]);
         }
 
-        // 回答データ収集
-        const responsesData = collectResponses();
-
-        // Supabaseに送信
-        const { error } = await supabaseClient
-            .from('responses')
-            .insert(responsesData);
-
-        if (error) throw error;
-
-        showThankYou();
+        // 次の質問へ
+        showQuestion(currentQuestionIndex + 1);
     } catch (error) {
         console.error('送信エラー:', error);
-        showError('送信に失敗しました。もう一度お試しください。');
+        alert('送信に失敗しました。もう一度お試しください。');
+    } finally {
         submitBtn.disabled = false;
         submitBtn.textContent = '回答を送信';
     }
 }
 
-// フォームバリデーション
-function validateForm() {
-    let isValid = true;
+// 回答を収集
+function collectAnswer(question) {
+    const inputs = document.querySelectorAll('[name="answer"]');
 
-    questions.forEach(question => {
-        if (question.is_required) {
-            const card = document.querySelector(`[data-question-id="${question.id}"]`);
-            const inputs = card.querySelectorAll(`[name="q_${question.id}"]`);
-
-            let hasValue = false;
-            inputs.forEach(input => {
-                if (input.type === 'radio' || input.type === 'checkbox') {
-                    if (input.checked) hasValue = true;
-                } else if (input.value.trim()) {
-                    hasValue = true;
-                }
-            });
-
-            if (!hasValue) {
-                card.classList.add('error');
-                isValid = false;
-            } else {
-                card.classList.remove('error');
-            }
-        }
-    });
-
-    if (!isValid) {
-        alert('必須項目にご回答ください。');
+    if (question.question_type === 'multiple') {
+        const selected = [];
+        inputs.forEach(input => {
+            if (input.checked) selected.push(input.value);
+        });
+        return selected.length > 0 ? JSON.stringify(selected) : null;
+    } else if (question.question_type === 'text') {
+        const value = inputs[0]?.value.trim();
+        return value || null;
+    } else {
+        let answer = null;
+        inputs.forEach(input => {
+            if (input.checked) answer = input.value;
+        });
+        return answer;
     }
-
-    return isValid;
 }
 
-// 回答データ収集
-function collectResponses() {
-    const responses = [];
+// スキップ
+function skipQuestion() {
+    showQuestion(currentQuestionIndex + 1);
+}
 
-    questions.forEach(question => {
-        const inputs = document.querySelectorAll(`[name="q_${question.id}"]`);
-        let answer = null;
-
-        if (question.question_type === 'multiple') {
-            const selected = [];
-            inputs.forEach(input => {
-                if (input.checked) selected.push(input.value);
-            });
-            answer = selected.length > 0 ? selected : null;
-        } else if (question.question_type === 'text') {
-            answer = inputs[0]?.value.trim() || null;
-        } else {
-            inputs.forEach(input => {
-                if (input.checked) answer = input.value;
-            });
-        }
-
-        if (answer !== null) {
-            responses.push({
-                question_id: question.id,
-                session_id: SESSION_ID,
-                answer: typeof answer === 'object' ? JSON.stringify(answer) : answer
-            });
-        }
-    });
-
-    return responses;
+// 最初から回答
+function restartSurvey() {
+    currentQuestionIndex = 0;
+    document.getElementById('complete').style.display = 'none';
+    document.getElementById('question-area').style.display = 'block';
+    showQuestion(0);
 }
 
 // 画面表示ヘルパー
-function showThankYou() {
-    document.getElementById('survey-form').style.display = 'none';
-    document.getElementById('thank-you').style.display = 'block';
+function showComplete() {
+    document.getElementById('question-area').style.display = 'none';
+    document.getElementById('complete').style.display = 'block';
 }
 
-function showAlreadySubmitted() {
+function showNoQuestions() {
     document.getElementById('loading').style.display = 'none';
-    document.getElementById('already-submitted').style.display = 'block';
+    document.getElementById('no-questions').style.display = 'block';
 }
 
 function showNoEvent() {
@@ -353,15 +290,8 @@ function showEventNotFound() {
 
 function showError(message) {
     document.getElementById('loading').style.display = 'none';
-    document.getElementById('survey-form').style.display = 'none';
     document.getElementById('error-message').style.display = 'block';
     document.getElementById('error-text').textContent = message;
-}
-
-// 再回答
-function resetAndResubmit() {
-    localStorage.removeItem('enquete_session_id');
-    location.reload();
 }
 
 // HTMLエスケープ

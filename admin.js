@@ -45,19 +45,10 @@ function setupTabs() {
 
 // イベントフォーム設定
 function setupEventForms() {
-    // タブ内のフォーム
     document.getElementById('add-event-form').addEventListener('submit', async (e) => {
         e.preventDefault();
         await addEvent('event-name', 'event-date', 'event-description');
         e.target.reset();
-    });
-
-    // モーダルのフォーム
-    document.getElementById('modal-event-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        await addEvent('modal-event-name', 'modal-event-date', 'modal-event-description');
-        e.target.reset();
-        hideEventModal();
     });
 }
 
@@ -233,15 +224,6 @@ function renderEventsList() {
             </div>
         </div>
     `).join('');
-}
-
-// モーダル表示/非表示
-function showEventModal() {
-    document.getElementById('event-modal').style.display = 'flex';
-}
-
-function hideEventModal() {
-    document.getElementById('event-modal').style.display = 'none';
 }
 
 // ========== 質問関連 ==========
