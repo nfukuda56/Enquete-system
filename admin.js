@@ -113,14 +113,24 @@ async function selectEvent(eventId) {
 }
 
 // QRコード生成
+let qrCodeInstance = null;
+
 function generateQRCode() {
     const url = `${BASE_URL}?event=${selectedEventId}`;
     const qrContainer = document.getElementById('qr-code');
     const qrUrlElement = document.getElementById('qr-url');
 
+    // 既存のQRコードをクリア
     qrContainer.innerHTML = '';
-    QRCode.toCanvas(qrContainer, url, { width: 150 }, (error) => {
-        if (error) console.error('QRコード生成エラー:', error);
+
+    // 新しいQRコードを生成
+    qrCodeInstance = new QRCode(qrContainer, {
+        text: url,
+        width: 150,
+        height: 150,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
     });
 
     qrUrlElement.textContent = url;
