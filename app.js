@@ -192,7 +192,6 @@ function generateImageUploadHTML(question) {
                    name="answer"
                    id="image-input"
                    accept="image/*"
-                   capture="environment"
                    onchange="previewImage(this)">
             <label for="image-input" class="image-upload-label">
                 <span class="upload-icon">📷</span>
