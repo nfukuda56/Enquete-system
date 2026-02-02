@@ -41,7 +41,7 @@ function setupTabs() {
 async function loadQuestions() {
     try {
         console.log('質問を読み込み中...');
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('questions')
             .select('*')
             .order('sort_order', { ascending: true });
@@ -62,7 +62,7 @@ async function loadQuestions() {
 async function loadResponses() {
     try {
         console.log('回答を読み込み中...');
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('responses')
             .select('*')
             .order('created_at', { ascending: true });
@@ -335,7 +335,7 @@ async function addQuestion() {
             sort_order: maxOrder + 1
         };
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('questions')
             .insert([questionData])
             .select()
@@ -402,7 +402,7 @@ function getTypeLabel(type) {
 // 質問の有効/無効切り替え
 async function toggleQuestionActive(id, isActive) {
     try {
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('questions')
             .update({ is_active: isActive })
             .eq('id', id);
@@ -426,7 +426,7 @@ async function deleteQuestion(id) {
 
     try {
         // ON DELETE CASCADE により関連する回答も自動削除される
-        const { error } = await supabase
+        const { error } = await supabaseClient
             .from('questions')
             .delete()
             .eq('id', id);

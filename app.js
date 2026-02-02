@@ -12,7 +12,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 // 既に回答済みかチェック
 async function checkIfAlreadySubmitted() {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('responses')
             .select('id')
             .eq('session_id', SESSION_ID)
@@ -34,7 +34,7 @@ async function checkIfAlreadySubmitted() {
 // 質問を読み込む
 async function loadQuestions() {
     try {
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('questions')
             .select('*')
             .eq('is_active', true)
@@ -182,7 +182,7 @@ async function submitSurvey() {
 
         // Supabaseに送信
         console.log('Supabaseに送信中...');
-        const { data, error } = await supabase
+        const { data, error } = await supabaseClient
             .from('responses')
             .insert(responsesData)
             .select();
