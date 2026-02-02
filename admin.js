@@ -3,15 +3,14 @@
 let questions = [];
 let responses = [];
 let charts = {};
-let pollingInterval = null;
-const POLLING_INTERVAL_MS = 5000; // 5秒ごとに更新
+let realtimeChannel = null;
 
 // 初期化
 document.addEventListener('DOMContentLoaded', async () => {
     setupTabs();
     await loadQuestions();
     await loadResponses();
-    startPolling();
+    startRealtimeSubscription();
     setupQuestionForm();
 });
 
@@ -72,24 +71,36 @@ async function loadResponses() {
     }
 }
 
-// ポーリング開始（5秒ごとにデータを取得）
-function startPolling() {
-    pollingInterval = setInterval(async () => {
-        const previousCount = responses.length;
-        await loadResponses();
-
-        // 新しい回答があればハイライト
-        if (responses.length > previousCount) {
-            highlightNewResponse();
-        }
-    }, POLLING_INTERVAL_MS);
+// Realtime購読開始
+function startRealtimeSubscription() {
+    realtimeChannel = supabaseClient
+        .channel('db-changes')
+        .on('postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'responses' },
+            (payload) => {
+                // 新しい回答を追加
+                responses.push(payload.new);
+                renderResults();
+                updateTotalCount();
+                highlightNewResponse();
+            }
+        )
+        .on('postgres_changes',
+            { event: '*', schema: 'public', table: 'questions' },
+            async () => {
+                // 質問が変更されたら再読み込み
+                await loadQuestions();
+                renderResults();
+            }
+        )
+        .subscribe();
 }
 
-// ポーリング停止
-function stopPolling() {
-    if (pollingInterval) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
+// Realtime購読停止
+function stopRealtimeSubscription() {
+    if (realtimeChannel) {
+        supabaseClient.removeChannel(realtimeChannel);
+        realtimeChannel = null;
     }
 }
 
@@ -457,5 +468,5 @@ function escapeHtml(text) {
 
 // ページ離脱時のクリーンアップ
 window.addEventListener('beforeunload', () => {
-    stopPolling();
+    stopRealtimeSubscription();
 });
