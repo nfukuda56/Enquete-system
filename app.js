@@ -120,6 +120,9 @@ function generateQuestionHTML(question) {
         case 'rating':
             inputHTML = generateRatingHTML(question);
             break;
+        case 'image':
+            inputHTML = generateImageUploadHTML(question);
+            break;
         default:
             inputHTML = '<p>不明な質問タイプです</p>';
     }
@@ -181,10 +184,78 @@ function generateRatingHTML(question) {
     `;
 }
 
+// 画像アップロード
+function generateImageUploadHTML(question) {
+    return `
+        <div class="image-upload-container">
+            <input type="file"
+                   name="answer"
+                   id="image-input"
+                   accept="image/*"
+                   capture="environment"
+                   onchange="previewImage(this)">
+            <label for="image-input" class="image-upload-label">
+                <span class="upload-icon">📷</span>
+                <span>タップして画像を選択</span>
+            </label>
+            <div id="image-preview" class="image-preview"></div>
+        </div>
+    `;
+}
+
+// 画像プレビュー表示
+function previewImage(input) {
+    const preview = document.getElementById('image-preview');
+    if (input.files && input.files[0]) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            preview.innerHTML = `<img src="${e.target.result}" alt="プレビュー">`;
+        };
+        reader.readAsDataURL(input.files[0]);
+    } else {
+        preview.innerHTML = '';
+    }
+}
+
+// 画像リサイズ（送信前に実行）
+async function resizeImage(file, maxWidth = 800, maxHeight = 800, quality = 0.8) {
+    return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = new Image();
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+
+                // リサイズ比率計算
+                if (width > maxWidth || height > maxHeight) {
+                    const ratio = Math.min(maxWidth / width, maxHeight / height);
+                    width = Math.round(width * ratio);
+                    height = Math.round(height * ratio);
+                }
+
+                // Canvas でリサイズ
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+
+                // Blob に変換
+                canvas.toBlob((blob) => {
+                    resolve(blob);
+                }, 'image/jpeg', quality);
+            };
+            img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
 // 回答を送信
 async function submitAnswer() {
     const question = questions[currentQuestionIndex];
-    const answer = collectAnswer(question);
+    let answer = collectAnswer(question);
 
     if (answer === null) {
         alert('回答を選択してください。');
@@ -196,6 +267,35 @@ async function submitAnswer() {
     submitBtn.textContent = '送信中...';
 
     try {
+        // 画像の場合はリサイズしてStorageにアップロード
+        if (question.question_type === 'image' && answer instanceof File) {
+            submitBtn.textContent = '画像を処理中...';
+
+            // リサイズ処理（最大800x800、JPEG品質80%）
+            const resizedBlob = await resizeImage(answer, 800, 800, 0.8);
+
+            const fileName = `${eventId}/${question.id}/${SESSION_ID}.jpg`;
+
+            submitBtn.textContent = 'アップロード中...';
+
+            // アップロード（upsert: trueで上書き）
+            const { data, error } = await supabaseClient.storage
+                .from('survey-images')
+                .upload(fileName, resizedBlob, {
+                    contentType: 'image/jpeg',
+                    upsert: true
+                });
+
+            if (error) throw error;
+
+            // 公開URLを取得（キャッシュ回避のためタイムスタンプ付与）
+            const { data: urlData } = supabaseClient.storage
+                .from('survey-images')
+                .getPublicUrl(fileName);
+
+            answer = urlData.publicUrl + '?t=' + Date.now();
+        }
+
         // 既存の回答を確認して更新または挿入（upsert）
         const { data: existing } = await supabaseClient
             .from('responses')
@@ -245,6 +345,12 @@ function collectAnswer(question) {
     } else if (question.question_type === 'text') {
         const value = inputs[0]?.value.trim();
         return value || null;
+    } else if (question.question_type === 'image') {
+        const fileInput = document.querySelector('[name="answer"]');
+        if (fileInput && fileInput.files && fileInput.files[0]) {
+            return fileInput.files[0]; // Fileオブジェクトを返す
+        }
+        return null;
     } else {
         let answer = null;
         inputs.forEach(input => {

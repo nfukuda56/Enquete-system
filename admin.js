@@ -379,8 +379,8 @@ function renderResults() {
     loading.style.display = 'none';
     container.style.display = 'block';
 
-    // グラフを描画
-    if (question.question_type !== 'text') {
+    // グラフを描画（text と image 以外）
+    if (question.question_type !== 'text' && question.question_type !== 'image') {
         renderChart(question);
     }
 }
@@ -410,6 +410,8 @@ function generateResultCard(question, questionResponses, index, totalQuestions) 
     let contentHTML = '';
     if (question.question_type === 'text') {
         contentHTML = generateTextResponses(questionResponses);
+    } else if (question.question_type === 'image') {
+        contentHTML = generateImageGallery(questionResponses);
     } else {
         contentHTML = `
             <div class="chart-container chart-container-large">
@@ -461,6 +463,32 @@ function generateTextResponses(questionResponses) {
             `).join('')}
         </div>
     `;
+}
+
+// 画像ギャラリー表示
+function generateImageGallery(questionResponses) {
+    if (questionResponses.length === 0) {
+        return '<p class="no-responses">まだ回答がありません</p>';
+    }
+
+    return `
+        <div class="image-gallery">
+            ${questionResponses.map(r => `
+                <div class="image-tile">
+                    <img src="${escapeHtml(r.answer)}"
+                         alt="投稿画像"
+                         loading="lazy"
+                         onclick="openImageModal('${escapeHtml(r.answer)}')">
+                </div>
+            `).join('')}
+        </div>
+    `;
+}
+
+// 画像拡大モーダル
+function openImageModal(src) {
+    // シンプルな拡大表示（新しいタブで開く）
+    window.open(src, '_blank');
 }
 
 // 統計サマリー生成
@@ -683,7 +711,8 @@ function getTypeLabel(type) {
         'single': '単一選択',
         'multiple': '複数選択',
         'text': '自由記述',
-        'rating': '5段階評価'
+        'rating': '5段階評価',
+        'image': '画像'
     };
     return labels[type] || type;
 }
