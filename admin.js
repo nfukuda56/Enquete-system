@@ -6,6 +6,7 @@ let responses = [];
 let charts = {};
 let realtimeChannel = null;
 let selectedEventId = null;
+let currentResultIndex = 0;
 
 // GitHub Pages URL（QRコード用）
 const BASE_URL = 'https://nfukuda56.github.io/Enquete-system/';
@@ -341,45 +342,69 @@ function updateTotalCount() {
     document.getElementById('total-responses').textContent = uniqueSessions.size;
 }
 
-// 結果を表示
+// 結果を表示（1問ずつ表示）
 function renderResults() {
     const container = document.getElementById('results-container');
     const loading = document.getElementById('loading');
 
     if (!selectedEventId) {
-        container.innerHTML = '<p class="no-data">イベントを選択してください。</p>';
+        container.innerHTML = '<p class="no-data">イベント管理タブでイベントを選択してください。</p>';
         loading.style.display = 'none';
         container.style.display = 'block';
         return;
     }
 
-    if (questions.length === 0) {
+    const activeQuestions = questions.filter(q => q.is_active);
+
+    if (activeQuestions.length === 0) {
         container.innerHTML = '<p class="no-data">まだ質問が登録されていません。</p>';
         loading.style.display = 'none';
         container.style.display = 'block';
         return;
     }
 
-    let html = '';
-    questions.filter(q => q.is_active).forEach((question, index) => {
-        const questionResponses = responses.filter(r => r.question_id === question.id);
-        html += generateResultCard(question, questionResponses, index);
-    });
+    // インデックスの範囲チェック
+    if (currentResultIndex >= activeQuestions.length) {
+        currentResultIndex = activeQuestions.length - 1;
+    }
+    if (currentResultIndex < 0) {
+        currentResultIndex = 0;
+    }
 
-    container.innerHTML = html || '<p class="no-data">表示する質問がありません。</p>';
+    const question = activeQuestions[currentResultIndex];
+    const questionResponses = responses.filter(r => r.question_id === question.id);
+    const html = generateResultCard(question, questionResponses, currentResultIndex, activeQuestions.length);
+
+    container.innerHTML = html;
     loading.style.display = 'none';
     container.style.display = 'block';
 
     // グラフを描画
-    questions.filter(q => q.is_active).forEach(question => {
-        if (question.question_type !== 'text') {
-            renderChart(question);
-        }
-    });
+    if (question.question_type !== 'text') {
+        renderChart(question);
+    }
+}
+
+// 前の質問へ
+function prevResult() {
+    const activeQuestions = questions.filter(q => q.is_active);
+    if (currentResultIndex > 0) {
+        currentResultIndex--;
+        renderResults();
+    }
+}
+
+// 次の質問へ
+function nextResult() {
+    const activeQuestions = questions.filter(q => q.is_active);
+    if (currentResultIndex < activeQuestions.length - 1) {
+        currentResultIndex++;
+        renderResults();
+    }
 }
 
 // 結果カード生成
-function generateResultCard(question, questionResponses, index) {
+function generateResultCard(question, questionResponses, index, totalQuestions) {
     const responseCount = questionResponses.length;
 
     let contentHTML = '';
@@ -387,20 +412,32 @@ function generateResultCard(question, questionResponses, index) {
         contentHTML = generateTextResponses(questionResponses);
     } else {
         contentHTML = `
-            <div class="chart-container">
+            <div class="chart-container chart-container-large">
                 <canvas id="chart-${question.id}"></canvas>
             </div>
             ${generateStatsSummary(question, questionResponses)}
         `;
     }
 
+    const prevDisabled = index === 0 ? 'disabled' : '';
+    const nextDisabled = index === totalQuestions - 1 ? 'disabled' : '';
+
     return `
-        <div class="result-card">
+        <div class="result-card result-card-fullscreen">
+            <div class="result-nav">
+                <button class="btn btn-secondary result-nav-btn" onclick="prevResult()" ${prevDisabled}>
+                    ← 前の質問
+                </button>
+                <span class="result-nav-indicator">${index + 1} / ${totalQuestions}</span>
+                <button class="btn btn-secondary result-nav-btn" onclick="nextResult()" ${nextDisabled}>
+                    次の質問 →
+                </button>
+            </div>
             <div class="result-header">
                 <span class="question-number">Q${index + 1}</span>
-                <span class="question-text">${escapeHtml(question.question_text)}</span>
-                <span class="response-count">${responseCount}件の回答</span>
+                <span class="question-text-large">${escapeHtml(question.question_text)}</span>
             </div>
+            <div class="result-response-count">${responseCount}件の回答</div>
             <div class="result-content">
                 ${contentHTML}
             </div>

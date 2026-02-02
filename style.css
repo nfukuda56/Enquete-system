@@ -451,17 +451,64 @@ header h1 {
     box-shadow: var(--shadow);
 }
 
+/* フルスクリーン表示用 */
+.result-card-fullscreen {
+    min-height: calc(100vh - 250px);
+    display: flex;
+    flex-direction: column;
+}
+
+.result-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 15px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.result-nav-btn {
+    min-width: 120px;
+}
+
+.result-nav-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.result-nav-indicator {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--primary-color);
+}
+
 .result-header {
     display: flex;
     align-items: center;
     gap: 12px;
-    margin-bottom: 20px;
+    margin-bottom: 10px;
     flex-wrap: wrap;
 }
 
 .result-header .question-text {
     flex: 1;
     margin-bottom: 0;
+}
+
+.question-text-large {
+    font-size: 1.5rem;
+    font-weight: 600;
+    flex: 1;
+}
+
+.result-response-count {
+    background: var(--bg-color);
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 1rem;
+    color: var(--text-secondary);
+    display: inline-block;
+    margin-bottom: 20px;
 }
 
 .response-count {
@@ -475,6 +522,12 @@ header h1 {
 .chart-container {
     height: 250px;
     margin-bottom: 20px;
+}
+
+.chart-container-large {
+    height: 350px;
+    flex: 1;
+    min-height: 300px;
 }
 
 /* 統計バー */
