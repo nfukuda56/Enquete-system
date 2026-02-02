@@ -40,18 +40,14 @@ function setupTabs() {
 // 質問を読み込む
 async function loadQuestions() {
     try {
-        console.log('質問を読み込み中...');
         const { data, error } = await supabaseClient
             .from('questions')
             .select('*')
             .order('sort_order', { ascending: true });
 
-        console.log('Supabase questions:', data, 'error:', error);
-
         if (error) throw error;
 
         questions = data || [];
-        console.log('取得した質問数:', questions.length);
         renderQuestionsList();
     } catch (error) {
         console.error('質問読み込みエラー:', error);
@@ -61,18 +57,14 @@ async function loadQuestions() {
 // 回答を読み込む
 async function loadResponses() {
     try {
-        console.log('回答を読み込み中...');
         const { data, error } = await supabaseClient
             .from('responses')
             .select('*')
             .order('created_at', { ascending: true });
 
-        console.log('Supabase responses:', data, 'error:', error);
-
         if (error) throw error;
 
         responses = data || [];
-        console.log('取得した回答数:', responses.length);
         renderResults();
         updateTotalCount();
     } catch (error) {

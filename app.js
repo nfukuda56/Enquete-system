@@ -178,23 +178,14 @@ async function submitSurvey() {
 
         // 回答データ収集
         const responsesData = collectResponses();
-        console.log('送信する回答データ:', responsesData);
 
         // Supabaseに送信
-        console.log('Supabaseに送信中...');
-        const { data, error } = await supabaseClient
+        const { error } = await supabaseClient
             .from('responses')
-            .insert(responsesData)
-            .select();
+            .insert(responsesData);
 
-        console.log('Supabase insert結果 - data:', data, 'error:', error);
+        if (error) throw error;
 
-        if (error) {
-            console.error('Supabaseエラー詳細:', error.message, error.details, error.hint);
-            throw error;
-        }
-
-        console.log('送信成功:', data);
         showThankYou();
     } catch (error) {
         console.error('送信エラー:', error);
