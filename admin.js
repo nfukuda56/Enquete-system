@@ -651,13 +651,20 @@ function renderQuestionsList() {
 
     container.innerHTML = questions.map((q, index) => `
         <div class="question-list-item ${q.is_active ? '' : 'inactive'}">
-            <div class="question-info">
+            <div class="question-order-controls">
+                <button class="btn-icon" onclick="moveQuestionUp(${q.id})" ${index === 0 ? 'disabled' : ''} title="上へ移動">▲</button>
                 <span class="question-order">Q${index + 1}</span>
+                <button class="btn-icon" onclick="moveQuestionDown(${q.id})" ${index === questions.length - 1 ? 'disabled' : ''} title="下へ移動">▼</button>
+            </div>
+            <div class="question-info">
                 <span class="question-type-badge">${getTypeLabel(q.question_type)}</span>
                 <span class="question-text">${escapeHtml(q.question_text)}</span>
                 ${q.is_required ? '<span class="required-badge">必須</span>' : ''}
             </div>
             <div class="question-actions">
+                <button class="btn btn-sm btn-secondary" onclick="editQuestion(${q.id})">
+                    編集
+                </button>
                 <button class="btn btn-sm ${q.is_active ? 'btn-warning' : 'btn-success'}"
                         onclick="toggleQuestionActive(${q.id}, ${!q.is_active})">
                     ${q.is_active ? '非表示' : '表示'}
@@ -742,6 +749,172 @@ function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+}
+
+// ========== 質問順序変更 ==========
+
+// 質問を上に移動
+async function moveQuestionUp(id) {
+    const index = questions.findIndex(q => q.id === id);
+    if (index <= 0) return;
+
+    const currentQuestion = questions[index];
+    const prevQuestion = questions[index - 1];
+
+    try {
+        // sort_orderを入れ替え
+        const currentOrder = currentQuestion.sort_order;
+        const prevOrder = prevQuestion.sort_order;
+
+        await Promise.all([
+            supabaseClient.from('questions').update({ sort_order: prevOrder }).eq('id', currentQuestion.id),
+            supabaseClient.from('questions').update({ sort_order: currentOrder }).eq('id', prevQuestion.id)
+        ]);
+
+        // ローカル配列を更新
+        currentQuestion.sort_order = prevOrder;
+        prevQuestion.sort_order = currentOrder;
+        questions.sort((a, b) => a.sort_order - b.sort_order);
+
+        renderQuestionsList();
+    } catch (error) {
+        console.error('順序変更エラー:', error);
+        alert('順序の変更に失敗しました。');
+    }
+}
+
+// 質問を下に移動
+async function moveQuestionDown(id) {
+    const index = questions.findIndex(q => q.id === id);
+    if (index < 0 || index >= questions.length - 1) return;
+
+    const currentQuestion = questions[index];
+    const nextQuestion = questions[index + 1];
+
+    try {
+        // sort_orderを入れ替え
+        const currentOrder = currentQuestion.sort_order;
+        const nextOrder = nextQuestion.sort_order;
+
+        await Promise.all([
+            supabaseClient.from('questions').update({ sort_order: nextOrder }).eq('id', currentQuestion.id),
+            supabaseClient.from('questions').update({ sort_order: currentOrder }).eq('id', nextQuestion.id)
+        ]);
+
+        // ローカル配列を更新
+        currentQuestion.sort_order = nextOrder;
+        nextQuestion.sort_order = currentOrder;
+        questions.sort((a, b) => a.sort_order - b.sort_order);
+
+        renderQuestionsList();
+    } catch (error) {
+        console.error('順序変更エラー:', error);
+        alert('順序の変更に失敗しました。');
+    }
+}
+
+// ========== 質問編集 ==========
+
+// 編集モーダルを表示
+function editQuestion(id) {
+    const question = questions.find(q => q.id === id);
+    if (!question) return;
+
+    // フォームに値をセット
+    document.getElementById('edit-question-id').value = question.id;
+    document.getElementById('edit-question-text').value = question.question_text;
+    document.getElementById('edit-question-type').value = question.question_type;
+    document.getElementById('edit-question-required').checked = question.is_required;
+
+    // 選択肢をセット
+    if (question.options && question.options.length > 0) {
+        document.getElementById('edit-question-options').value = question.options.join('\n');
+    } else {
+        document.getElementById('edit-question-options').value = '';
+    }
+
+    // 選択肢入力欄の表示/非表示
+    toggleEditOptionsInput();
+
+    // モーダルを表示
+    document.getElementById('edit-question-modal').style.display = 'flex';
+}
+
+// 編集モーダルを非表示
+function hideEditQuestionModal() {
+    document.getElementById('edit-question-modal').style.display = 'none';
+}
+
+// 編集モーダルの選択肢入力切り替え
+function toggleEditOptionsInput() {
+    const type = document.getElementById('edit-question-type').value;
+    const optionsGroup = document.getElementById('edit-options-group');
+    optionsGroup.style.display = (type === 'single' || type === 'multiple') ? 'block' : 'none';
+}
+
+// 編集フォーム送信処理
+document.addEventListener('DOMContentLoaded', () => {
+    const editForm = document.getElementById('edit-question-form');
+    if (editForm) {
+        editForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await saveQuestionEdit();
+        });
+    }
+});
+
+// 質問編集を保存
+async function saveQuestionEdit() {
+    const id = parseInt(document.getElementById('edit-question-id').value);
+    const text = document.getElementById('edit-question-text').value.trim();
+    const type = document.getElementById('edit-question-type').value;
+    const optionsText = document.getElementById('edit-question-options').value;
+    const isRequired = document.getElementById('edit-question-required').checked;
+
+    if (!text) {
+        alert('質問文を入力してください。');
+        return;
+    }
+
+    let options = null;
+    if (type === 'single' || type === 'multiple') {
+        options = optionsText.split('\n').map(o => o.trim()).filter(o => o);
+        if (options.length < 2) {
+            alert('選択肢は2つ以上入力してください。');
+            return;
+        }
+    }
+
+    try {
+        const { error } = await supabaseClient
+            .from('questions')
+            .update({
+                question_text: text,
+                question_type: type,
+                options: options,
+                is_required: isRequired
+            })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        // ローカル配列を更新
+        const question = questions.find(q => q.id === id);
+        if (question) {
+            question.question_text = text;
+            question.question_type = type;
+            question.options = options;
+            question.is_required = isRequired;
+        }
+
+        renderQuestionsList();
+        renderResults();
+        hideEditQuestionModal();
+        alert('質問を更新しました。');
+    } catch (error) {
+        console.error('更新エラー:', error);
+        alert('質問の更新に失敗しました。');
+    }
 }
 
 // ページ離脱時のクリーンアップ

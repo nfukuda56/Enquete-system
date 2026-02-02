@@ -148,6 +148,45 @@
         </footer>
     </div>
 
+    <!-- 質問編集モーダル -->
+    <div id="edit-question-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <span class="modal-close" onclick="hideEditQuestionModal()">&times;</span>
+            <h2>質問を編集</h2>
+            <form id="edit-question-form">
+                <input type="hidden" id="edit-question-id">
+                <div class="form-group">
+                    <label for="edit-question-text">質問文</label>
+                    <input type="text" id="edit-question-text" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit-question-type">質問タイプ</label>
+                    <select id="edit-question-type" onchange="toggleEditOptionsInput()">
+                        <option value="single">単一選択（ラジオボタン）</option>
+                        <option value="multiple">複数選択（チェックボックス）</option>
+                        <option value="text">自由記述</option>
+                        <option value="rating">5段階評価</option>
+                    </select>
+                </div>
+
+                <div class="form-group" id="edit-options-group">
+                    <label for="edit-question-options">選択肢（1行に1つ）</label>
+                    <textarea id="edit-question-options" rows="4"></textarea>
+                </div>
+
+                <div class="form-group">
+                    <label for="edit-question-required">
+                        <input type="checkbox" id="edit-question-required">
+                        必須回答
+                    </label>
+                </div>
+
+                <button type="submit" class="btn btn-primary">保存</button>
+            </form>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js"></script>
     <script src="admin.js"></script>
