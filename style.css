@@ -1187,3 +1187,127 @@ header .event-name {
         font-size: 2.5rem;
     }
 }
+
+/* ========== 回答率に基づく背景色 ========== */
+
+/* 回答率30%以下: 黄色背景 */
+.response-rate-low {
+    background: #FEF3C7 !important;
+    border: 1px solid #FCD34D;
+}
+
+.response-rate-low .stat-value {
+    color: #B45309 !important;
+}
+
+/* 回答率30%超過: 緑色背景 */
+.response-rate-high {
+    background: #D1FAE5 !important;
+    border: 1px solid #6EE7B7;
+}
+
+.response-rate-high .stat-value {
+    color: #047857 !important;
+}
+
+/* 低回答率時の通知メッセージ */
+.low-response-notice {
+    text-align: center;
+    padding: 40px 20px;
+    background: #FEF3C7;
+    border: 1px solid #FCD34D;
+    border-radius: 8px;
+    margin-bottom: 20px;
+}
+
+.low-response-notice p {
+    color: #92400E;
+    font-size: 1rem;
+    margin: 0;
+}
+
+/* ========== イベント管理拡張 ========== */
+
+/* 参加予定人数バッジ */
+.event-participants-badge {
+    display: inline-block;
+    background: #DBEAFE;
+    color: #1E40AF;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    margin-left: 8px;
+}
+
+/* 関連資料リンク */
+.event-material {
+    margin-top: 8px;
+}
+
+.event-material a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: 0.9rem;
+}
+
+.event-material a:hover {
+    text-decoration: underline;
+}
+
+/* ========== QRコード横並び表示 ========== */
+
+.qr-group {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    padding: 15px;
+    background: var(--bg-color);
+    border-radius: 8px;
+    flex-wrap: wrap;
+}
+
+.qr-group .qr-info {
+    min-width: 180px;
+}
+
+/* ========== 参加者画面: 関連資料URL表示 ========== */
+
+.material-link-container {
+    margin-top: 12px;
+}
+
+.material-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: 0.95rem;
+    padding: 8px 16px;
+    background: #EEF2FF;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+
+.material-link:hover {
+    background: #E0E7FF;
+    text-decoration: none;
+}
+
+.material-link-icon {
+    font-size: 1.1rem;
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 768px) {
+    .qr-section {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .qr-group {
+        width: 100%;
+        justify-content: center;
+        text-align: center;
+    }
+}

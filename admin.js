@@ -7,6 +7,7 @@ let charts = {};
 let realtimeChannel = null;
 let selectedEventId = null;
 let currentResultIndex = 0;
+let currentEvent = null;  // 選択中のイベント情報
 
 // GitHub Pages URL（QRコード用）
 const BASE_URL = 'https://nfukuda56.github.io/Enquete-system/';
@@ -85,12 +86,14 @@ function renderEventSelect() {
 // イベント選択
 async function selectEvent(eventId) {
     selectedEventId = eventId ? parseInt(eventId) : null;
+    currentEvent = selectedEventId ? events.find(e => e.id === selectedEventId) : null;
 
     // QRコードセクション表示/非表示
     const qrSection = document.getElementById('qr-section');
     if (selectedEventId) {
         qrSection.style.display = 'flex';
         generateQRCode();
+        generateMaterialQRCode();
         document.getElementById('add-question-btn').disabled = false;
         document.getElementById('question-event-notice').style.display = 'none';
     } else {
@@ -139,11 +142,58 @@ function copyEventUrl() {
     });
 }
 
+// 関連資料QRコード生成
+let materialQrCodeInstance = null;
+
+function generateMaterialQRCode() {
+    const materialQrGroup = document.getElementById('material-qr-group');
+    const materialUrl = currentEvent?.material_url;
+
+    if (!materialUrl) {
+        materialQrGroup.style.display = 'none';
+        return;
+    }
+
+    const qrContainer = document.getElementById('material-qr-code');
+    const qrUrlElement = document.getElementById('material-qr-url');
+
+    // 既存のQRコードをクリア
+    qrContainer.innerHTML = '';
+
+    // 新しいQRコードを生成
+    materialQrCodeInstance = new QRCode(qrContainer, {
+        text: materialUrl,
+        width: 150,
+        height: 150,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+    });
+
+    qrUrlElement.textContent = materialUrl;
+    materialQrGroup.style.display = 'flex';
+}
+
+// 関連資料URLコピー
+function copyMaterialUrl() {
+    const url = currentEvent?.material_url;
+    if (!url) return;
+
+    navigator.clipboard.writeText(url).then(() => {
+        alert('関連資料URLをコピーしました');
+    }).catch(err => {
+        console.error('コピーエラー:', err);
+        prompt('URLをコピーしてください:', url);
+    });
+}
+
 // イベント追加
 async function addEvent(nameId, dateId, descId) {
     const name = document.getElementById(nameId).value.trim();
     const date = document.getElementById(dateId).value || null;
     const description = document.getElementById(descId).value.trim() || null;
+    const participants = document.getElementById('event-participants').value;
+    const materialUrl = document.getElementById('event-material-url').value.trim() || null;
 
     if (!name) {
         alert('イベント名を入力してください。');
@@ -153,7 +203,13 @@ async function addEvent(nameId, dateId, descId) {
     try {
         const { data, error } = await supabaseClient
             .from('events')
-            .insert([{ name, event_date: date, description }])
+            .insert([{
+                name,
+                event_date: date,
+                description,
+                expected_participants: participants ? parseInt(participants) : null,
+                material_url: materialUrl
+            }])
             .select()
             .single();
 
@@ -166,6 +222,9 @@ async function addEvent(nameId, dateId, descId) {
         // 新しいイベントを選択
         document.getElementById('event-select').value = data.id;
         await selectEvent(data.id);
+
+        // フォームリセット
+        document.getElementById('add-event-form').reset();
 
         alert('イベントを作成しました。');
     } catch (error) {
@@ -218,13 +277,94 @@ function renderEventsList() {
             <div class="event-info">
                 <span class="event-name">${escapeHtml(e.name)}</span>
                 ${e.event_date ? `<span class="event-date">${e.event_date}</span>` : ''}
+                ${e.expected_participants ? `<span class="event-participants-badge">参加予定: ${e.expected_participants}名</span>` : ''}
                 ${e.description ? `<p class="event-description">${escapeHtml(e.description)}</p>` : ''}
+                ${e.material_url ? `<p class="event-material"><a href="${escapeHtml(e.material_url)}" target="_blank" rel="noopener">関連資料</a></p>` : ''}
             </div>
             <div class="event-actions">
+                <button class="btn btn-sm btn-secondary" onclick="editEvent(${e.id})">編集</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteEvent(${e.id})">削除</button>
             </div>
         </div>
     `).join('');
+}
+
+// ========== イベント編集 ==========
+
+// イベント編集モーダル表示
+function editEvent(id) {
+    const event = events.find(e => e.id === id);
+    if (!event) return;
+
+    document.getElementById('edit-event-id').value = event.id;
+    document.getElementById('edit-event-name').value = event.name;
+    document.getElementById('edit-event-date').value = event.event_date || '';
+    document.getElementById('edit-event-description').value = event.description || '';
+    document.getElementById('edit-event-participants').value = event.expected_participants || '';
+    document.getElementById('edit-event-material-url').value = event.material_url || '';
+
+    document.getElementById('edit-event-modal').style.display = 'flex';
+}
+
+// イベント編集モーダル非表示
+function hideEditEventModal() {
+    document.getElementById('edit-event-modal').style.display = 'none';
+}
+
+// イベント編集を保存
+async function saveEventEdit() {
+    const id = parseInt(document.getElementById('edit-event-id').value);
+    const name = document.getElementById('edit-event-name').value.trim();
+    const date = document.getElementById('edit-event-date').value || null;
+    const description = document.getElementById('edit-event-description').value.trim() || null;
+    const participants = document.getElementById('edit-event-participants').value;
+    const materialUrl = document.getElementById('edit-event-material-url').value.trim() || null;
+
+    if (!name) {
+        alert('イベント名を入力してください。');
+        return;
+    }
+
+    try {
+        const { error } = await supabaseClient
+            .from('events')
+            .update({
+                name,
+                event_date: date,
+                description,
+                expected_participants: participants ? parseInt(participants) : null,
+                material_url: materialUrl
+            })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        // ローカル配列を更新
+        const event = events.find(e => e.id === id);
+        if (event) {
+            event.name = name;
+            event.event_date = date;
+            event.description = description;
+            event.expected_participants = participants ? parseInt(participants) : null;
+            event.material_url = materialUrl;
+        }
+
+        // currentEventも更新
+        if (currentEvent && currentEvent.id === id) {
+            currentEvent = event;
+            generateMaterialQRCode(); // 関連資料QRコードを更新
+        }
+
+        renderEventSelect();
+        renderEventsList();
+        hideEditEventModal();
+        updateTotalCount(); // 回答率表示の更新
+
+        alert('イベントを更新しました。');
+    } catch (error) {
+        console.error('更新エラー:', error);
+        alert('イベントの更新に失敗しました。');
+    }
 }
 
 // ========== 質問関連 ==========
@@ -336,10 +476,48 @@ function highlightNewResponse() {
     setTimeout(() => indicator.classList.remove('pulse'), 1000);
 }
 
-// 総回答数更新
+// 総回答数更新（回答率に基づく表示）
 function updateTotalCount() {
     const uniqueSessions = new Set(responses.map(r => r.session_id));
-    document.getElementById('total-responses').textContent = uniqueSessions.size;
+    const responseCount = uniqueSessions.size;
+    const expectedParticipants = currentEvent?.expected_participants || 0;
+
+    const statBox = document.getElementById('response-stat-box');
+    const statValue = document.getElementById('total-responses');
+
+    if (expectedParticipants > 0) {
+        // 「回答者数/参加者数」形式で表示
+        statValue.textContent = `${responseCount}/${expectedParticipants}`;
+
+        // 回答率計算
+        const responseRate = (responseCount / expectedParticipants) * 100;
+
+        // 背景色の設定
+        statBox.classList.remove('response-rate-low', 'response-rate-high');
+        if (responseRate <= 30) {
+            statBox.classList.add('response-rate-low');  // 黄色
+        } else {
+            statBox.classList.add('response-rate-high'); // 緑色
+        }
+    } else {
+        // 参加者数未設定の場合は従来通り
+        statValue.textContent = responseCount;
+        statBox.classList.remove('response-rate-low', 'response-rate-high');
+    }
+}
+
+// グラフ表示判定（回答率30%超過時のみ表示）
+function calculateShouldShowChart() {
+    const expectedParticipants = currentEvent?.expected_participants || 0;
+    if (expectedParticipants === 0) {
+        return true; // 参加者数未設定時は常にグラフ表示
+    }
+
+    const uniqueSessions = new Set(responses.map(r => r.session_id));
+    const responseCount = uniqueSessions.size;
+    const responseRate = (responseCount / expectedParticipants) * 100;
+
+    return responseRate > 30;
 }
 
 // 結果を表示（1問ずつ表示）
@@ -373,14 +551,18 @@ function renderResults() {
 
     const question = activeQuestions[currentResultIndex];
     const questionResponses = responses.filter(r => r.question_id === question.id);
-    const html = generateResultCard(question, questionResponses, currentResultIndex, activeQuestions.length);
+
+    // 回答率に基づくグラフ表示判定
+    const shouldShowChart = calculateShouldShowChart();
+
+    const html = generateResultCard(question, questionResponses, currentResultIndex, activeQuestions.length, shouldShowChart);
 
     container.innerHTML = html;
     loading.style.display = 'none';
     container.style.display = 'block';
 
-    // グラフを描画（text と image 以外）
-    if (question.question_type !== 'text' && question.question_type !== 'image') {
+    // グラフを描画（text/image以外、かつ回答率30%超過時のみ）
+    if (question.question_type !== 'text' && question.question_type !== 'image' && shouldShowChart) {
         renderChart(question);
     }
 }
@@ -404,7 +586,7 @@ function nextResult() {
 }
 
 // 結果カード生成
-function generateResultCard(question, questionResponses, index, totalQuestions) {
+function generateResultCard(question, questionResponses, index, totalQuestions, shouldShowChart = true) {
     const responseCount = questionResponses.length;
 
     let contentHTML = '';
@@ -412,10 +594,19 @@ function generateResultCard(question, questionResponses, index, totalQuestions) 
         contentHTML = generateTextResponses(questionResponses);
     } else if (question.question_type === 'image') {
         contentHTML = generateImageGallery(questionResponses);
-    } else {
+    } else if (shouldShowChart) {
+        // 回答率30%超過: グラフ表示
         contentHTML = `
             <div class="chart-container chart-container-large">
                 <canvas id="chart-${question.id}"></canvas>
+            </div>
+            ${generateStatsSummary(question, questionResponses)}
+        `;
+    } else {
+        // 回答率30%以下: メッセージ表示（統計サマリーは表示）
+        contentHTML = `
+            <div class="low-response-notice">
+                <p>回答率が30%を超えるとグラフが表示されます</p>
             </div>
             ${generateStatsSummary(question, questionResponses)}
         `;
@@ -888,11 +1079,21 @@ function toggleEditOptionsInput() {
 
 // 編集フォーム送信処理
 document.addEventListener('DOMContentLoaded', () => {
-    const editForm = document.getElementById('edit-question-form');
-    if (editForm) {
-        editForm.addEventListener('submit', async (e) => {
+    // 質問編集フォーム
+    const editQuestionForm = document.getElementById('edit-question-form');
+    if (editQuestionForm) {
+        editQuestionForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             await saveQuestionEdit();
+        });
+    }
+
+    // イベント編集フォーム
+    const editEventForm = document.getElementById('edit-event-form');
+    if (editEventForm) {
+        editEventForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await saveEventEdit();
         });
     }
 });

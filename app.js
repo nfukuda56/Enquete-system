@@ -48,6 +48,15 @@ async function loadEventInfo() {
 
         eventInfo = data;
         document.getElementById('event-name').textContent = eventInfo.name;
+
+        // 関連資料URLが設定されている場合は表示
+        if (eventInfo.material_url) {
+            const container = document.getElementById('material-link-container');
+            const link = document.getElementById('material-link');
+            link.href = eventInfo.material_url;
+            container.style.display = 'block';
+        }
+
         return true;
     } catch (error) {
         console.error('イベント読み込みエラー:', error);
