@@ -1134,6 +1134,21 @@ header .event-name {
     box-shadow: var(--shadow);
 }
 
+.image-error {
+    color: var(--danger-color);
+    font-size: 0.9rem;
+    margin-top: 10px;
+    text-align: center;
+    padding: 8px;
+    background: #FEF2F2;
+    border-radius: 6px;
+    display: none;
+}
+
+.image-error:not(:empty) {
+    display: block;
+}
+
 /* 管理画面 - 画像タイル表示 */
 .image-gallery {
     display: grid;
