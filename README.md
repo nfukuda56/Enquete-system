@@ -1,123 +1,180 @@
 # Enquete-system
-セミナー用リアルタイム参加者アンケート
+セミナー用リアルタイムフィードバックシステム
 
-Google Sheets + Apps Scriptを使用したシンプルなアンケートシステムです。GitHub Pagesで無料ホスティング可能。
+Supabaseをバックエンドに使用したリアルタイムアンケートシステムです。GitHub Pagesで無料ホスティング可能。
 
 ## 特徴
 
-- **完全無料**: Google Sheets + Apps Scriptで運用（Googleアカウントのみ必要）
-- **リアルタイム集計**: 管理画面で回答状況を5秒ごとに自動更新
-- **多彩な質問形式**: 単一選択、複数選択、自由記述、5段階評価に対応
+- **リアルタイム更新**: Supabase Realtimeによる即座の回答反映
+- **イベント管理**: イベントごとに質問・回答を管理
+- **QRコード生成**: 参加者用URLのQRコードを自動生成
+- **一問一答形式**: 参加者は1問ずつ回答（スキップ・再回答可能）
+- **多彩な質問形式**: 単一選択、複数選択、自由記述、5段階評価、画像アップロード
+- **画像投稿機能**: スマホから画像を投稿、タイル表示で一覧
 - **グラフ可視化**: Chart.jsによる見やすいグラフ表示
-- **静的ホスティング対応**: GitHub Pagesで簡単にデプロイ可能
-- **レスポンシブデザイン**: モバイルデバイスにも対応
+- **レスポンシブデザイン**: モバイルデバイスに最適化
 
 ## 構成
 
-- **`index.html`** - 参加者用アンケートページ
-- **`admin.html`** - 管理者用ダッシュボード
-- **`app.js`** - 参加者ページのロジック
-- **`admin.js`** - 管理ページのロジック
-- **`config.js`** - Apps Script URL設定
-- **`style.css`** - スタイルシート
-- **`google-apps-script/`** - Apps Scriptコードとセットアップ手順
+```
+Enquete-system/
+├── index.html      # 参加者用アンケートページ
+├── admin.html      # 管理者用ダッシュボード
+├── app.js          # 参加者ページのロジック
+├── admin.js        # 管理ページのロジック
+├── config.js       # Supabase接続設定
+├── style.css       # スタイルシート
+└── README.md       # このファイル
+```
 
 ## セットアップ
 
-### 1. Google Sheets + Apps Scriptの設定
+### 1. Supabaseプロジェクトの作成
 
-詳細な手順は [`google-apps-script/SETUP.md`](./google-apps-script/SETUP.md) を参照してください。
+1. [Supabase](https://supabase.com) でアカウント作成・ログイン
+2. 新しいプロジェクトを作成
+3. SQL Editorで以下を実行してテーブルを作成:
 
-**概要:**
-1. Google Spreadsheetsで新しいスプレッドシートを作成
-2. 「questions」「responses」の2つのシートを設定
-3. Apps Scriptでコードをデプロイ
-4. Web App URLを取得
+```sql
+-- イベントテーブル
+CREATE TABLE events (
+    id BIGSERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    event_date DATE,
+    description TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-### 2. config.jsの設定
+-- 質問テーブル
+CREATE TABLE questions (
+    id BIGSERIAL PRIMARY KEY,
+    event_id BIGINT REFERENCES events(id) ON DELETE CASCADE,
+    question_text TEXT NOT NULL,
+    question_type TEXT NOT NULL CHECK (question_type IN ('single', 'multiple', 'text', 'rating', 'image')),
+    options JSONB,
+    is_required BOOLEAN DEFAULT false,
+    is_active BOOLEAN DEFAULT true,
+    sort_order INTEGER DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-`config.js` を開き、Apps Script Web App URLを設定：
+-- 回答テーブル
+CREATE TABLE responses (
+    id BIGSERIAL PRIMARY KEY,
+    question_id BIGINT REFERENCES questions(id) ON DELETE CASCADE,
+    session_id TEXT NOT NULL,
+    answer TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
 
-```javascript
-const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/【あなたのID】/exec';
+-- RLSポリシー設定
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE responses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Enable all access for events" ON events FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for questions" ON questions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Enable all access for responses" ON responses FOR ALL USING (true) WITH CHECK (true);
+
+-- Realtime有効化
+ALTER PUBLICATION supabase_realtime ADD TABLE events;
+ALTER PUBLICATION supabase_realtime ADD TABLE questions;
+ALTER PUBLICATION supabase_realtime ADD TABLE responses;
 ```
 
-### 3. ローカルでテスト
+### 2. Storage バケットの作成（画像アップロード用）
 
-1. ブラウザで `index.html` を開く
-2. 質問が表示されることを確認
-3. テスト回答を送信
-4. Google Sheetsに回答が保存されることを確認
-5. `admin.html` で管理画面を確認
+1. Supabase Dashboard → **Storage** → **New bucket**
+2. バケット名: `survey-images`
+3. **Public bucket**: ON
 
-### 4. GitHub Pagesへデプロイ（オプション）
+4. SQL Editorで以下を実行してStorageポリシーを設定:
+
+```sql
+CREATE POLICY "Allow public uploads" ON storage.objects
+FOR INSERT TO anon, authenticated
+WITH CHECK (bucket_id = 'survey-images');
+
+CREATE POLICY "Allow public read" ON storage.objects
+FOR SELECT TO anon, authenticated
+USING (bucket_id = 'survey-images');
+
+CREATE POLICY "Allow public update" ON storage.objects
+FOR UPDATE TO anon, authenticated
+USING (bucket_id = 'survey-images');
+
+CREATE POLICY "Allow public delete" ON storage.objects
+FOR DELETE TO anon, authenticated
+USING (bucket_id = 'survey-images');
+```
+
+### 3. config.jsの設定
+
+Supabase Dashboard → **Settings** → **API** から以下を取得し、`config.js` を編集:
+
+```javascript
+const SUPABASE_URL = 'https://あなたのプロジェクト.supabase.co';
+const SUPABASE_ANON_KEY = 'あなたのanon key';
+```
+
+### 4. GitHub Pagesへデプロイ
 
 1. GitHubリポジトリにプッシュ
-2. Settings > Pages > Source から `main` ブランチを選択
+2. Settings → Pages → Source から `main` ブランチを選択
 3. デプロイされたURLにアクセス
 
 ## 使い方
 
-### 参加者向け（index.html）
-
-1. アンケートページにアクセス
-2. 表示された質問に回答
-3. 「回答を送信」ボタンをクリック
-4. 完了画面が表示されます
-
 ### 管理者向け（admin.html）
+
+**イベント管理タブ:**
+1. 新しいイベントを作成
+2. イベントを選択するとQRコードが表示
+3. QRコードを参加者に共有
+
+**質問管理タブ:**
+- 質問を追加（タイプ選択、選択肢設定）
+- 質問の順序変更（▲▼ボタン）
+- 質問の編集・削除・表示/非表示切り替え
 
 **回答結果タブ:**
 - リアルタイムで回答状況を確認
+- 前後の質問に移動して結果を表示
 - グラフと統計で可視化
-- 自由記述回答を一覧表示
 
-**質問管理タブ:**
-- 新しい質問を追加
-- 既存の質問を表示/非表示切り替え
-- 質問の削除
+### 参加者向け（index.html?event=ID）
+
+1. QRコードまたはURLからアクセス
+2. 1問ずつ表示される質問に回答
+3. スキップまたは「回答を送信」をクリック
+4. 全問回答後、完了画面が表示
 
 ## 質問タイプ
 
-1. **単一選択（ラジオボタン）**: 選択肢から1つを選択
-2. **複数選択（チェックボックス）**: 選択肢から複数選択可能
-3. **自由記述（テキストエリア）**: 自由にテキストを入力
-4. **5段階評価**: 1〜5の数値で評価
+| タイプ | 説明 |
+|--------|------|
+| 単一選択 | ラジオボタンで1つを選択 |
+| 複数選択 | チェックボックスで複数選択可能 |
+| 自由記述 | テキストエリアで自由入力 |
+| 5段階評価 | 1〜5の数値で評価 |
+| 画像 | スマホから画像をアップロード（800x800pxにリサイズ） |
 
 ## 技術スタック
 
 - **フロントエンド**: HTML, CSS, Vanilla JavaScript
-- **バックエンド**: Google Apps Script
-- **データベース**: Google Sheets
+- **バックエンド**: Supabase (PostgreSQL + Realtime)
+- **ストレージ**: Supabase Storage
 - **グラフ**: Chart.js
-- **ホスティング**: GitHub Pages（または任意の静的ホスティング）
-
-## トラブルシューティング
-
-### 質問が表示されない
-
-- `config.js` のURLが正しいか確認
-- ブラウザのコンソール（F12）でエラーを確認
-- Apps Scriptのデプロイ設定を確認
-
-### 回答が保存されない
-
-- Apps Scriptのログを確認
-- CORS設定（「アクセスできるユーザー: 全員」）を確認
-- Google Sheetsのシート名とヘッダー行を確認
-
-詳細は [`google-apps-script/SETUP.md`](./google-apps-script/SETUP.md) のトラブルシューティングを参照してください。
+- **QRコード**: qrcodejs
+- **ホスティング**: GitHub Pages
 
 ## セキュリティ
 
 - 現在の設定では誰でもアクセス・回答可能です
 - 本番環境では適切な認証機能の追加を検討してください
-- Google Sheetsの共有設定は「リンクを知っている全員」以下にしてください
+- Supabase RLSポリシーを必要に応じて調整してください
 
 ## ライセンス
 
 MIT License
-
-## 貢献
-
-Issue、Pull Requestを歓迎します。

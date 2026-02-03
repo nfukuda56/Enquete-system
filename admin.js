@@ -645,18 +645,13 @@ async function addQuestion() {
             sort_order: maxOrder
         };
 
-        console.log('質問データ:', questionData);
-
         const { data, error } = await supabaseClient
             .from('questions')
             .insert([questionData])
             .select()
             .single();
 
-        if (error) {
-            console.error('Supabaseエラー詳細:', error);
-            throw error;
-        }
+        if (error) throw error;
 
         questions.push(data);
         renderQuestionsList();
