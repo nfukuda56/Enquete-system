@@ -15,33 +15,80 @@ const BASE_URL = 'https://nfukuda56.github.io/Enquete-system/';
 
 // 初期化
 document.addEventListener('DOMContentLoaded', async () => {
-    setupTabs();
+    setupViewNavigation();
     setupEventForms();
     setupQuestionForm();
     await loadEvents();
     startRealtimeSubscription();
 });
 
-// タブ切り替え
-function setupTabs() {
-    const tabBtns = document.querySelectorAll('.tab-btn');
-    tabBtns.forEach(btn => {
+// ビュー切り替え（SPA ナビゲーション）
+function setupViewNavigation() {
+    document.querySelectorAll('.sidebar-nav-btn[data-view]').forEach(btn => {
         btn.addEventListener('click', () => {
-            const tabId = btn.dataset.tab;
-
-            tabBtns.forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.style.display = 'none';
-                content.classList.remove('active');
-            });
-
-            const targetTab = document.getElementById(`${tabId}-tab`);
-            targetTab.style.display = 'block';
-            targetTab.classList.add('active');
+            const viewName = btn.getAttribute('data-view');
+            switchView(viewName);
         });
     });
+}
+
+// ビューを切り替える
+function switchView(viewName) {
+    // すべてのビューを非表示
+    document.querySelectorAll('.view-content').forEach(view => {
+        view.style.display = 'none';
+        view.classList.remove('active');
+    });
+
+    // 対象のビューを表示
+    const targetView = document.getElementById(`${viewName}-view`);
+    if (targetView) {
+        targetView.style.display = 'flex';
+        targetView.classList.add('active');
+    }
+
+    // ナビボタンのアクティブ状態更新
+    document.querySelectorAll('.sidebar-nav-btn[data-view]').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-view') === viewName);
+    });
+}
+
+// 画面上部ヘッダーを更新
+function updateTopHeader() {
+    const nameEl = document.getElementById('header-event-name');
+    const dateEl = document.getElementById('header-event-date');
+
+    if (selectedEventId && currentEvent) {
+        nameEl.textContent = currentEvent.name;
+        if (currentEvent.event_date) {
+            dateEl.textContent = new Date(currentEvent.event_date).toLocaleDateString('ja-JP');
+        } else {
+            dateEl.textContent = '';
+        }
+    } else {
+        nameEl.textContent = 'イベントを選択してください';
+        dateEl.textContent = '';
+    }
+}
+
+// サイドバーQRコードを更新
+function updateSidebarQR() {
+    const qrContainer = document.getElementById('sidebar-qr');
+    if (!qrContainer) return;
+
+    qrContainer.innerHTML = '';
+
+    if (selectedEventId) {
+        const url = `${BASE_URL}?event=${selectedEventId}`;
+        new QRCode(qrContainer, {
+            text: url,
+            width: 100,
+            height: 100,
+            colorDark: '#000000',
+            colorLight: '#ffffff',
+            correctLevel: QRCode.CorrectLevel.M
+        });
+    }
 }
 
 // ========== イベント関連 ==========
@@ -89,7 +136,11 @@ async function selectEvent(eventId) {
     selectedEventId = eventId ? parseInt(eventId) : null;
     currentEvent = selectedEventId ? events.find(e => e.id === selectedEventId) : null;
 
-    // QRコードセクション表示/非表示
+    // 画面ヘッダーとサイドバーQRを更新
+    updateTopHeader();
+    updateSidebarQR();
+
+    // QRコードセクション表示/非表示（イベント管理ビュー内）
     const qrSection = document.getElementById('qr-section');
     if (selectedEventId) {
         qrSection.style.display = 'flex';
@@ -362,6 +413,7 @@ async function saveEventEdit() {
         if (currentEvent && currentEvent.id === id) {
             currentEvent = event;
             generateMaterialQRCode(); // 関連資料QRコードを更新
+            updateTopHeader(); // ヘッダーを更新
         }
 
         renderEventSelect();
@@ -491,8 +543,8 @@ function updateTotalCount() {
     const responseCount = uniqueSessions.size;
     const expectedParticipants = currentEvent?.expected_participants || 0;
 
-    const statBox = document.getElementById('response-stat-box');
     const statValue = document.getElementById('total-responses');
+    const sidebarStats = document.querySelector('.sidebar-stats');
 
     if (expectedParticipants > 0) {
         // 「回答者数/参加者数」形式で表示
@@ -501,17 +553,21 @@ function updateTotalCount() {
         // 回答率計算
         const responseRate = (responseCount / expectedParticipants) * 100;
 
-        // 背景色の設定
-        statBox.classList.remove('response-rate-low', 'response-rate-high');
-        if (responseRate <= 30) {
-            statBox.classList.add('response-rate-low');  // 黄色
-        } else {
-            statBox.classList.add('response-rate-high'); // 緑色
+        // 背景色の設定（サイドバー用）
+        if (sidebarStats) {
+            sidebarStats.classList.remove('response-rate-low', 'response-rate-high');
+            if (responseRate <= 30) {
+                sidebarStats.classList.add('response-rate-low');
+            } else {
+                sidebarStats.classList.add('response-rate-high');
+            }
         }
     } else {
         // 参加者数未設定の場合は従来通り
         statValue.textContent = responseCount;
-        statBox.classList.remove('response-rate-low', 'response-rate-high');
+        if (sidebarStats) {
+            sidebarStats.classList.remove('response-rate-low', 'response-rate-high');
+        }
     }
 }
 
@@ -536,7 +592,7 @@ function renderResults() {
     const presentControls = document.getElementById('present-mode-controls');
 
     if (!selectedEventId) {
-        container.innerHTML = '<p class="no-data">イベント管理タブでイベントを選択してください。</p>';
+        container.innerHTML = '<p class="no-data">イベント管理でイベントを選択してください。</p>';
         loading.style.display = 'none';
         container.style.display = 'block';
         presentControls.style.display = 'none';
@@ -1293,19 +1349,31 @@ function updatePresentModeUI() {
     const btn = document.getElementById('present-mode-btn');
     const status = document.getElementById('present-status');
     const statusText = document.getElementById('present-status-text');
+    const sidebarBtn = document.getElementById('sidebar-present-btn');
 
-    if (!btn || !status || !statusText) return;
+    if (btn && status && statusText) {
+        if (isPresenting) {
+            btn.textContent = 'プレゼンモード終了';
+            btn.classList.add('btn-presenting');
+            status.classList.add('active');
+            statusText.textContent = '配信中';
+        } else {
+            btn.textContent = 'プレゼンモード開始';
+            btn.classList.remove('btn-presenting');
+            status.classList.remove('active');
+            statusText.textContent = '停止中';
+        }
+    }
 
-    if (isPresenting) {
-        btn.textContent = 'プレゼンモード終了';
-        btn.classList.add('btn-presenting');
-        status.classList.add('active');
-        statusText.textContent = '配信中';
-    } else {
-        btn.textContent = 'プレゼンモード開始';
-        btn.classList.remove('btn-presenting');
-        status.classList.remove('active');
-        statusText.textContent = '停止中';
+    // サイドバーのプレゼンボタンも更新
+    if (sidebarBtn) {
+        if (isPresenting) {
+            sidebarBtn.textContent = 'プレゼン終了';
+            sidebarBtn.classList.add('active');
+        } else {
+            sidebarBtn.textContent = 'プレゼン開始';
+            sidebarBtn.classList.remove('active');
+        }
     }
 }
 

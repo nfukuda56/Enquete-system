@@ -1446,3 +1446,157 @@ header .event-name {
         width: 100%;
     }
 }
+
+/* ========== 管理画面 SPA レイアウト ========== */
+
+.admin-layout {
+    display: grid;
+    grid-template-columns: 10% 90%;
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+        "header header"
+        "sidebar main";
+    min-height: 100vh;
+}
+
+.top-header {
+    grid-area: header;
+    background: #2c3e50;
+    color: white;
+    padding: 1rem 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.top-header h1 {
+    margin: 0;
+    font-size: 1.3rem;
+    font-weight: 600;
+}
+
+.header-event-date {
+    font-size: 0.9rem;
+    opacity: 0.8;
+}
+
+.sidebar {
+    grid-area: sidebar;
+    background: #34495e;
+    color: white;
+    padding: 1rem 0.5rem;
+    display: flex;
+    flex-direction: column;
+    height: calc(100vh - 60px);
+    overflow-y: auto;
+}
+
+.sidebar-logo {
+    font-size: 1.5rem;
+    font-weight: bold;
+    text-align: center;
+    padding: 1rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+}
+
+.sidebar-stats {
+    padding: 1rem 0;
+    text-align: center;
+}
+
+.sidebar-stats .stat-value {
+    font-size: 2rem;
+    font-weight: bold;
+    color: white;
+}
+
+.sidebar-stats .stat-label {
+    font-size: 0.8rem;
+    opacity: 0.8;
+}
+
+.sidebar-live {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem;
+    font-size: 0.75rem;
+    opacity: 0.9;
+}
+
+.sidebar-nav, .sidebar-nav-bottom {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem 0;
+}
+
+.sidebar-nav-btn {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white;
+    padding: 0.75rem 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+    font-size: 0.85rem;
+}
+
+.sidebar-nav-btn:hover,
+.sidebar-nav-btn.active {
+    background: rgba(255,255,255,0.2);
+}
+
+.sidebar-spacer {
+    flex-grow: 1;
+}
+
+.sidebar-qr {
+    padding: 0.5rem;
+    background: white;
+    border-radius: 4px;
+    margin: 0.5rem 0;
+}
+
+.sidebar-qr canvas {
+    width: 100% !important;
+    height: auto !important;
+}
+
+.admin-layout .main-content {
+    grid-area: main;
+    padding: 1.5rem;
+    overflow-y: hidden;
+    background: #f5f5f5;
+    height: calc(100vh - 60px);
+    display: flex;
+    flex-direction: column;
+}
+
+.view-content {
+    flex: 1;
+    overflow-y: auto;
+    display: none;
+}
+
+.view-content.active {
+    display: flex;
+    flex-direction: column;
+}
+
+/* SPA レスポンシブ対応 */
+@media (max-width: 768px) {
+    .admin-layout {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "header"
+            "main";
+    }
+    .sidebar {
+        display: none;
+    }
+    .admin-layout .main-content {
+        height: calc(100vh - 60px);
+    }
+}

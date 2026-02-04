@@ -9,36 +9,48 @@
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 </head>
 <body>
-    <div class="container admin-container">
-        <header>
-            <h1>アンケート管理画面</h1>
-            <div class="header-stats">
-                <div class="stat-box" id="response-stat-box">
-                    <span class="stat-label">回答者数</span>
-                    <span class="stat-value" id="total-responses">0</span>
-                </div>
-                <div class="stat-box live-indicator">
-                    <span class="live-dot"></span>
-                    <span>リアルタイム更新中</span>
-                </div>
-            </div>
+    <div class="admin-layout">
+        <!-- 画面ヘッダー -->
+        <header class="top-header" id="top-header">
+            <h1 id="header-event-name">イベントを選択してください</h1>
+            <span class="header-event-date" id="header-event-date"></span>
         </header>
 
-        <main>
-            <div class="admin-tabs">
-                <button class="tab-btn active" data-tab="results">回答結果</button>
-                <button class="tab-btn" data-tab="questions">質問管理</button>
-                <button class="tab-btn" data-tab="events">イベント管理</button>
+        <!-- サイドバー -->
+        <aside class="sidebar">
+            <div class="sidebar-logo">SFS</div>
+            <div class="sidebar-stats">
+                <div class="stat-value" id="total-responses">0</div>
+                <div class="stat-label">参加者</div>
             </div>
+            <div class="sidebar-live">
+                <span class="live-dot"></span>
+                <span>更新中</span>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="sidebar-nav-btn active" data-view="results">回答管理</button>
+                <button class="sidebar-nav-btn" id="sidebar-present-btn" onclick="togglePresentMode()">
+                    プレゼン開始
+                </button>
+            </nav>
+            <div class="sidebar-qr" id="sidebar-qr"></div>
+            <div class="sidebar-spacer"></div>
+            <nav class="sidebar-nav-bottom">
+                <button class="sidebar-nav-btn" data-view="questions">質問管理</button>
+                <button class="sidebar-nav-btn" data-view="events">イベント管理</button>
+            </nav>
+        </aside>
 
-            <!-- 回答結果タブ -->
-            <div id="results-tab" class="tab-content active">
+        <!-- メインコンテンツ -->
+        <main class="main-content">
+            <!-- 回答結果ビュー -->
+            <div id="results-view" class="view-content active">
                 <div class="loading" id="loading">
                     <div class="spinner"></div>
                     <p>データを読み込み中...</p>
                 </div>
 
-                <!-- プレゼンモードコントロール（results-containerの外に配置） -->
+                <!-- プレゼンモードコントロール -->
                 <div class="present-mode-controls" id="present-mode-controls" style="display: none;">
                     <button onclick="togglePresentMode()" id="present-mode-btn" class="btn btn-primary">
                         プレゼンモード開始
@@ -53,8 +65,8 @@
                 <div id="results-container" style="display: none;"></div>
             </div>
 
-            <!-- 質問管理タブ -->
-            <div id="questions-tab" class="tab-content" style="display: none;">
+            <!-- 質問管理ビュー -->
+            <div id="questions-view" class="view-content">
                 <div class="question-form-container">
                     <h2>新しい質問を追加</h2>
                     <p class="event-notice" id="question-event-notice">イベントを選択してください</p>
@@ -101,8 +113,8 @@
                 </div>
             </div>
 
-            <!-- イベント管理タブ -->
-            <div id="events-tab" class="tab-content" style="display: none;">
+            <!-- イベント管理ビュー -->
+            <div id="events-view" class="view-content">
                 <!-- イベント選択・QRコードエリア -->
                 <div class="event-selector">
                     <h2>イベント選択</h2>
@@ -177,10 +189,6 @@
                 </div>
             </div>
         </main>
-
-        <footer>
-            <p>&copy; 2024 セミナーアンケートシステム - 管理画面</p>
-        </footer>
     </div>
 
     <!-- イベント編集モーダル -->
