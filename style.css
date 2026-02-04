@@ -1311,3 +1311,138 @@ header .event-name {
         text-align: center;
     }
 }
+
+/* ========== プレゼンモード ========== */
+
+/* 待機画面 */
+.waiting-screen {
+    text-align: center;
+    padding: 60px 20px;
+    background: linear-gradient(135deg, #EEF2FF 0%, #E0E7FF 100%);
+    border-radius: 16px;
+    border: 2px dashed var(--primary-color);
+}
+
+.waiting-screen .waiting-icon {
+    font-size: 4rem;
+    margin-bottom: 20px;
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.7; transform: scale(1.1); }
+}
+
+.waiting-screen h2 {
+    color: var(--primary-color);
+    font-size: 1.5rem;
+    margin-bottom: 12px;
+    line-height: 1.4;
+}
+
+.waiting-screen p {
+    color: var(--text-secondary);
+    font-size: 1rem;
+}
+
+/* 次の質問待機通知 */
+.pending-notice {
+    background: #FEF3C7;
+    border: 1px solid #FCD34D;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-top: 16px;
+    text-align: center;
+    animation: fadeIn 0.3s ease;
+}
+
+.pending-notice p {
+    color: #92400E;
+    font-size: 0.9rem;
+    margin: 0;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(-10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* 管理画面 プレゼンモードボタン */
+.present-mode-controls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+    padding: 12px 16px;
+    background: var(--bg-color);
+    border-radius: 8px;
+}
+
+.present-mode-controls .btn {
+    min-width: 160px;
+}
+
+.present-status {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.present-status.active {
+    color: #047857;
+}
+
+.present-status .status-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+}
+
+.present-status.active .status-dot {
+    background: #10B981;
+    animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+    0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); }
+    50% { opacity: 0.8; box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+}
+
+/* プレゼン中ボタンスタイル */
+.btn-presenting {
+    background: #DC2626 !important;
+    border-color: #DC2626 !important;
+}
+
+.btn-presenting:hover {
+    background: #B91C1C !important;
+    border-color: #B91C1C !important;
+}
+
+/* レスポンシブ */
+@media (max-width: 768px) {
+    .waiting-screen {
+        padding: 40px 16px;
+    }
+
+    .waiting-screen .waiting-icon {
+        font-size: 3rem;
+    }
+
+    .waiting-screen h2 {
+        font-size: 1.3rem;
+    }
+
+    .present-mode-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .present-mode-controls .btn {
+        width: 100%;
+    }
+}

@@ -26,17 +26,24 @@
                 <p>読み込み中...</p>
             </div>
 
-            <!-- 質問表示エリア（一問一答） -->
-            <div id="question-area" style="display: none;">
-                <div class="progress-bar">
-                    <span id="progress-text">質問 1 / 1</span>
-                    <div class="progress-track">
-                        <div class="progress-fill" id="progress-fill"></div>
-                    </div>
+            <!-- 待機画面（プレゼンモード） -->
+            <div id="waiting-area" style="display: none;">
+                <div class="waiting-screen">
+                    <div class="waiting-icon">⏳</div>
+                    <h2>質問が表示されるまで<br>お待ちください</h2>
+                    <p>管理者が質問を選択すると表示されます</p>
                 </div>
+            </div>
 
+            <!-- 質問表示エリア（プレゼンモード） -->
+            <div id="question-area" style="display: none;">
                 <div id="current-question">
                     <!-- 現在の質問がここに表示されます -->
+                </div>
+
+                <!-- 次の質問待機通知 -->
+                <div id="pending-notice" class="pending-notice" style="display: none;">
+                    <p>送信後に次の質問に移ります</p>
                 </div>
 
                 <div class="question-actions">
@@ -46,6 +53,14 @@
                     <button type="button" class="btn btn-primary" id="submit-btn" onclick="submitAnswer()">
                         回答を送信
                     </button>
+                </div>
+            </div>
+
+            <!-- 回答送信済み画面 -->
+            <div id="answered-area" style="display: none;">
+                <div class="info-message">
+                    <h2>回答を送信しました</h2>
+                    <p>次の質問をお待ちください</p>
                 </div>
             </div>
 

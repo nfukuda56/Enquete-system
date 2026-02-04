@@ -166,7 +166,51 @@ ALTER PUBLICATION supabase_realtime ADD TABLE questions;
 ALTER PUBLICATION supabase_realtime ADD TABLE responses;
 
 -- =====================================================
--- 5. Storage バケット作成
+-- 5. admin_state テーブル（プレゼンモード状態管理）
+-- =====================================================
+
+-- admin_state テーブル（管理画面の状態を参加者画面に同期）
+CREATE TABLE IF NOT EXISTS admin_state (
+    id BIGSERIAL PRIMARY KEY,
+    event_id BIGINT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+    current_question_id BIGINT REFERENCES questions(id) ON DELETE SET NULL,
+    is_presenting BOOLEAN DEFAULT false,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(event_id)
+);
+
+-- admin_state テーブルにコメント追加
+COMMENT ON TABLE admin_state IS '管理画面プレゼンモード状態管理テーブル';
+COMMENT ON COLUMN admin_state.id IS 'ID（自動採番）';
+COMMENT ON COLUMN admin_state.event_id IS 'イベントID（外部キー）';
+COMMENT ON COLUMN admin_state.current_question_id IS '現在表示中の質問ID';
+COMMENT ON COLUMN admin_state.is_presenting IS 'プレゼンモードフラグ（true: 配信中, false: 停止中）';
+COMMENT ON COLUMN admin_state.updated_at IS '最終更新日時';
+
+-- admin_state テーブルのインデックス
+CREATE INDEX IF NOT EXISTS idx_admin_state_event_id ON admin_state(event_id);
+CREATE INDEX IF NOT EXISTS idx_admin_state_updated_at ON admin_state(updated_at DESC);
+
+-- admin_state テーブルのRLS設定
+ALTER TABLE admin_state ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "admin_state_select_policy" ON admin_state
+    FOR SELECT USING (true);
+
+CREATE POLICY "admin_state_insert_policy" ON admin_state
+    FOR INSERT WITH CHECK (true);
+
+CREATE POLICY "admin_state_update_policy" ON admin_state
+    FOR UPDATE USING (true);
+
+CREATE POLICY "admin_state_delete_policy" ON admin_state
+    FOR DELETE USING (true);
+
+-- admin_state をRealtimeに追加
+ALTER PUBLICATION supabase_realtime ADD TABLE admin_state;
+
+-- =====================================================
+-- 6. Storage バケット作成
 -- =====================================================
 
 -- survey-images バケットを作成

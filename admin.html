@@ -39,6 +39,16 @@
                 </div>
 
                 <div id="results-container" style="display: none;">
+                    <!-- プレゼンモードコントロール -->
+                    <div class="present-mode-controls">
+                        <button onclick="togglePresentMode()" id="present-mode-btn" class="btn btn-primary">
+                            プレゼンモード開始
+                        </button>
+                        <span class="present-status" id="present-status">
+                            <span class="status-dot"></span>
+                            <span id="present-status-text">停止中</span>
+                        </span>
+                    </div>
                     <!-- 結果がここに動的に挿入されます -->
                 </div>
             </div>

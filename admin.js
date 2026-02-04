@@ -8,6 +8,7 @@ let realtimeChannel = null;
 let selectedEventId = null;
 let currentResultIndex = 0;
 let currentEvent = null;  // 選択中のイベント情報
+let isPresenting = false;  // プレゼンモード状態
 
 // GitHub Pages URL（QRコード用）
 const BASE_URL = 'https://nfukuda56.github.io/Enquete-system/';
@@ -105,6 +106,14 @@ async function selectEvent(eventId) {
     // 質問と回答を再読み込み
     await loadQuestions();
     await loadResponses();
+
+    // プレゼンモード状態を読み込み
+    if (selectedEventId) {
+        await loadAdminState();
+    } else {
+        isPresenting = false;
+        updatePresentModeUI();
+    }
 }
 
 // QRコード生成
@@ -568,20 +577,28 @@ function renderResults() {
 }
 
 // 前の質問へ
-function prevResult() {
+async function prevResult() {
     const activeQuestions = questions.filter(q => q.is_active);
     if (currentResultIndex > 0) {
         currentResultIndex--;
         renderResults();
+        // プレゼンモード中は参加者画面に同期
+        if (isPresenting) {
+            await syncAdminState();
+        }
     }
 }
 
 // 次の質問へ
-function nextResult() {
+async function nextResult() {
     const activeQuestions = questions.filter(q => q.is_active);
     if (currentResultIndex < activeQuestions.length - 1) {
         currentResultIndex++;
         renderResults();
+        // プレゼンモード中は参加者画面に同期
+        if (isPresenting) {
+            await syncAdminState();
+        }
     }
 }
 
@@ -1152,7 +1169,132 @@ async function saveQuestionEdit() {
     }
 }
 
+// ========== プレゼンモード ==========
+
+// admin_state を読み込み
+async function loadAdminState() {
+    if (!selectedEventId) return;
+
+    try {
+        const { data, error } = await supabaseClient
+            .from('admin_state')
+            .select('*')
+            .eq('event_id', selectedEventId)
+            .single();
+
+        if (error && error.code !== 'PGRST116') {
+            // PGRST116 = not found (初回アクセス時)
+            throw error;
+        }
+
+        if (data) {
+            isPresenting = data.is_presenting;
+            // current_question_id から currentResultIndex を復元
+            if (data.current_question_id) {
+                const activeQuestions = questions.filter(q => q.is_active);
+                const index = activeQuestions.findIndex(q => q.id === data.current_question_id);
+                if (index >= 0) {
+                    currentResultIndex = index;
+                }
+            }
+        } else {
+            isPresenting = false;
+        }
+
+        updatePresentModeUI();
+        renderResults();
+    } catch (error) {
+        console.error('admin_state読み込みエラー:', error);
+        isPresenting = false;
+        updatePresentModeUI();
+    }
+}
+
+// プレゼンモード切り替え
+async function togglePresentMode() {
+    if (!selectedEventId) {
+        alert('イベントを選択してください。');
+        return;
+    }
+
+    const activeQuestions = questions.filter(q => q.is_active);
+    if (activeQuestions.length === 0) {
+        alert('表示する質問がありません。');
+        return;
+    }
+
+    isPresenting = !isPresenting;
+    updatePresentModeUI();
+    await syncAdminState();
+}
+
+// admin_state をDBに同期
+async function syncAdminState() {
+    if (!selectedEventId) return;
+
+    const activeQuestions = questions.filter(q => q.is_active);
+    const currentQuestionId = activeQuestions[currentResultIndex]?.id || null;
+
+    try {
+        const { data: existing } = await supabaseClient
+            .from('admin_state')
+            .select('id')
+            .eq('event_id', selectedEventId)
+            .single();
+
+        if (existing) {
+            // 更新
+            await supabaseClient
+                .from('admin_state')
+                .update({
+                    current_question_id: currentQuestionId,
+                    is_presenting: isPresenting,
+                    updated_at: new Date().toISOString()
+                })
+                .eq('event_id', selectedEventId);
+        } else {
+            // 挿入
+            await supabaseClient
+                .from('admin_state')
+                .insert([{
+                    event_id: selectedEventId,
+                    current_question_id: currentQuestionId,
+                    is_presenting: isPresenting,
+                    updated_at: new Date().toISOString()
+                }]);
+        }
+    } catch (error) {
+        console.error('admin_state同期エラー:', error);
+    }
+}
+
+// プレゼンモードUI更新
+function updatePresentModeUI() {
+    const btn = document.getElementById('present-mode-btn');
+    const status = document.getElementById('present-status');
+    const statusText = document.getElementById('present-status-text');
+
+    if (!btn || !status || !statusText) return;
+
+    if (isPresenting) {
+        btn.textContent = 'プレゼンモード終了';
+        btn.classList.add('btn-presenting');
+        status.classList.add('active');
+        statusText.textContent = '配信中';
+    } else {
+        btn.textContent = 'プレゼンモード開始';
+        btn.classList.remove('btn-presenting');
+        status.classList.remove('active');
+        statusText.textContent = '停止中';
+    }
+}
+
 // ページ離脱時のクリーンアップ
-window.addEventListener('beforeunload', () => {
+window.addEventListener('beforeunload', async () => {
+    // プレゼンモード中ならページ離脱時に終了
+    if (isPresenting && selectedEventId) {
+        isPresenting = false;
+        await syncAdminState();
+    }
     stopRealtimeSubscription();
 });
