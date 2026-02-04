@@ -10,12 +10,6 @@
 </head>
 <body>
     <div class="admin-layout">
-        <!-- 画面ヘッダー -->
-        <header class="top-header" id="top-header">
-            <h1 id="header-event-name">イベントを選択してください</h1>
-            <span class="header-event-date" id="header-event-date"></span>
-        </header>
-
         <!-- サイドバー -->
         <aside class="sidebar">
             <div class="sidebar-logo">SFS</div>
@@ -28,7 +22,7 @@
                 <span>更新中</span>
             </div>
             <nav class="sidebar-nav">
-                <button class="sidebar-nav-btn active" data-view="results">回答管理</button>
+                <button class="sidebar-nav-btn active" data-view="results">回答結果</button>
                 <button class="sidebar-nav-btn" id="sidebar-present-btn" onclick="togglePresentMode()">
                     プレゼン開始
                 </button>
@@ -43,22 +37,17 @@
 
         <!-- メインコンテンツ -->
         <main class="main-content">
+            <!-- メインコンテンツヘッダー -->
+            <header class="main-header" id="main-header">
+                <h1 id="header-event-name">イベントを選択してください</h1>
+                <span class="header-event-date" id="header-event-date"></span>
+            </header>
+
             <!-- 回答結果ビュー -->
             <div id="results-view" class="view-content active">
                 <div class="loading" id="loading">
                     <div class="spinner"></div>
                     <p>データを読み込み中...</p>
-                </div>
-
-                <!-- プレゼンモードコントロール -->
-                <div class="present-mode-controls" id="present-mode-controls" style="display: none;">
-                    <button onclick="togglePresentMode()" id="present-mode-btn" class="btn btn-primary">
-                        プレゼンモード開始
-                    </button>
-                    <span class="present-status" id="present-status">
-                        <span class="status-dot"></span>
-                        <span id="present-status-text">停止中</span>
-                    </span>
                 </div>
 
                 <!-- 結果がここに動的に挿入されます -->
@@ -67,43 +56,45 @@
 
             <!-- 質問管理ビュー -->
             <div id="questions-view" class="view-content">
-                <div class="question-form-container">
-                    <h2>新しい質問を追加</h2>
-                    <p class="event-notice" id="question-event-notice">イベントを選択してください</p>
-                    <form id="add-question-form">
-                        <div class="form-group">
-                            <label for="question-text">質問文</label>
-                            <input type="text" id="question-text" required
-                                   placeholder="例: 今日のセミナーの満足度を教えてください">
-                        </div>
+                <details class="collapsible-section">
+                    <summary class="collapsible-header">新しい質問を追加</summary>
+                    <div class="question-form-container">
+                        <p class="event-notice" id="question-event-notice">イベントを選択してください</p>
+                        <form id="add-question-form">
+                            <div class="form-group">
+                                <label for="question-text">質問文</label>
+                                <input type="text" id="question-text" required
+                                       placeholder="例: 今日のセミナーの満足度を教えてください">
+                            </div>
 
-                        <div class="form-group">
-                            <label for="question-type">質問タイプ</label>
-                            <select id="question-type" onchange="toggleOptionsInput()">
-                                <option value="single">単一選択（ラジオボタン）</option>
-                                <option value="multiple">複数選択（チェックボックス）</option>
-                                <option value="text">自由記述</option>
-                                <option value="rating">5段階評価</option>
-                                <option value="image">画像アップロード</option>
-                            </select>
-                        </div>
+                            <div class="form-group">
+                                <label for="question-type">質問タイプ</label>
+                                <select id="question-type" onchange="toggleOptionsInput()">
+                                    <option value="single">単一選択（ラジオボタン）</option>
+                                    <option value="multiple">複数選択（チェックボックス）</option>
+                                    <option value="text">自由記述</option>
+                                    <option value="rating">5段階評価</option>
+                                    <option value="image">画像アップロード</option>
+                                </select>
+                            </div>
 
-                        <div class="form-group" id="options-group">
-                            <label for="question-options">選択肢（1行に1つ）</label>
-                            <textarea id="question-options" rows="4"
-                                      placeholder="とても満足&#10;満足&#10;普通&#10;不満&#10;とても不満"></textarea>
-                        </div>
+                            <div class="form-group" id="options-group">
+                                <label for="question-options">選択肢（1行に1つ）</label>
+                                <textarea id="question-options" rows="4"
+                                          placeholder="とても満足&#10;満足&#10;普通&#10;不満&#10;とても不満"></textarea>
+                            </div>
 
-                        <div class="form-group">
-                            <label for="question-required">
-                                <input type="checkbox" id="question-required" checked>
-                                必須回答
-                            </label>
-                        </div>
+                            <div class="form-group">
+                                <label for="question-required">
+                                    <input type="checkbox" id="question-required" checked>
+                                    必須回答
+                                </label>
+                            </div>
 
-                        <button type="submit" class="btn btn-primary" id="add-question-btn" disabled>質問を追加</button>
-                    </form>
-                </div>
+                            <button type="submit" class="btn btn-primary" id="add-question-btn" disabled>質問を追加</button>
+                        </form>
+                    </div>
+                </details>
 
                 <div class="questions-list-container">
                     <h2>登録済み質問一覧</h2>
@@ -145,41 +136,43 @@
                     </div>
                 </div>
 
-                <div class="event-form-container">
-                    <h2>新しいイベントを作成</h2>
-                    <form id="add-event-form">
-                        <div class="form-group">
-                            <label for="event-name">イベント名 *</label>
-                            <input type="text" id="event-name" required
-                                   placeholder="例: 第1回 技術セミナー">
-                        </div>
+                <details class="collapsible-section">
+                    <summary class="collapsible-header">新しいイベントを作成</summary>
+                    <div class="event-form-container">
+                        <form id="add-event-form">
+                            <div class="form-group">
+                                <label for="event-name">イベント名 *</label>
+                                <input type="text" id="event-name" required
+                                       placeholder="例: 第1回 技術セミナー">
+                            </div>
 
-                        <div class="form-group">
-                            <label for="event-date">開催日</label>
-                            <input type="date" id="event-date">
-                        </div>
+                            <div class="form-group">
+                                <label for="event-date">開催日</label>
+                                <input type="date" id="event-date">
+                            </div>
 
-                        <div class="form-group">
-                            <label for="event-description">説明</label>
-                            <textarea id="event-description" rows="3"
-                                      placeholder="イベントの説明（任意）"></textarea>
-                        </div>
+                            <div class="form-group">
+                                <label for="event-description">説明</label>
+                                <textarea id="event-description" rows="3"
+                                          placeholder="イベントの説明（任意）"></textarea>
+                            </div>
 
-                        <div class="form-group">
-                            <label for="event-participants">予想参加人数</label>
-                            <input type="number" id="event-participants" min="1"
-                                   placeholder="例: 50">
-                        </div>
+                            <div class="form-group">
+                                <label for="event-participants">予想参加人数</label>
+                                <input type="number" id="event-participants" min="1"
+                                       placeholder="例: 50">
+                            </div>
 
-                        <div class="form-group">
-                            <label for="event-material-url">関連資料URL</label>
-                            <input type="url" id="event-material-url"
-                                   placeholder="https://example.com/materials">
-                        </div>
+                            <div class="form-group">
+                                <label for="event-material-url">関連資料URL</label>
+                                <input type="url" id="event-material-url"
+                                       placeholder="https://example.com/materials">
+                            </div>
 
-                        <button type="submit" class="btn btn-primary">イベントを作成</button>
-                    </form>
-                </div>
+                            <button type="submit" class="btn btn-primary">イベントを作成</button>
+                        </form>
+                    </div>
+                </details>
 
                 <div class="events-list-container">
                     <h2>イベント一覧</h2>
