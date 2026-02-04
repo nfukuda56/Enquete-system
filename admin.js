@@ -1236,15 +1236,21 @@ async function syncAdminState() {
     const currentQuestionId = activeQuestions[currentResultIndex]?.id || null;
 
     try {
-        const { data: existing } = await supabaseClient
+        // maybeSingle()を使用：レコードがない場合はnullを返す（エラーにならない）
+        const { data: existing, error: selectError } = await supabaseClient
             .from('admin_state')
             .select('id')
             .eq('event_id', selectedEventId)
-            .single();
+            .maybeSingle();
+
+        if (selectError) {
+            console.error('admin_state検索エラー:', selectError);
+            return;
+        }
 
         if (existing) {
             // 更新
-            await supabaseClient
+            const { error: updateError } = await supabaseClient
                 .from('admin_state')
                 .update({
                     current_question_id: currentQuestionId,
@@ -1252,9 +1258,13 @@ async function syncAdminState() {
                     updated_at: new Date().toISOString()
                 })
                 .eq('event_id', selectedEventId);
+
+            if (updateError) {
+                console.error('admin_state更新エラー:', updateError);
+            }
         } else {
             // 挿入
-            await supabaseClient
+            const { error: insertError } = await supabaseClient
                 .from('admin_state')
                 .insert([{
                     event_id: selectedEventId,
@@ -1262,6 +1272,10 @@ async function syncAdminState() {
                     is_presenting: isPresenting,
                     updated_at: new Date().toISOString()
                 }]);
+
+            if (insertError) {
+                console.error('admin_state挿入エラー:', insertError);
+            }
         }
     } catch (error) {
         console.error('admin_state同期エラー:', error);
