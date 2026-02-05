@@ -39,6 +39,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     startRealtimeSubscription();
 });
 
+// ページ可視性変更時に状態をリフレッシュ（スリープ復帰対応）
+document.addEventListener('visibilitychange', async () => {
+    if (document.visibilityState === 'visible' && eventId) {
+        console.log('ページ復帰: admin_state をリフレッシュ');
+        await loadAdminState();
+    }
+});
+
 // イベント情報を読み込む
 async function loadEventInfo() {
     try {
