@@ -676,12 +676,11 @@ function generateResultCard(question, questionResponses, index, totalQuestions, 
             ${generateStatsSummary(question, questionResponses)}
         `;
     } else {
-        // 回答率30%以下: メッセージ表示（統計サマリーは表示）
+        // 回答率30%以下: メッセージのみ表示（グラフ・統計バー非表示）
         contentHTML = `
             <div class="low-response-notice">
                 <p>回答率が30%を超えるとグラフが表示されます</p>
             </div>
-            ${generateStatsSummary(question, questionResponses)}
         `;
     }
 
