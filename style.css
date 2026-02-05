@@ -451,11 +451,13 @@ header h1 {
     box-shadow: var(--shadow);
 }
 
-/* フルスクリーン表示用 */
+/* フルスクリーン表示用（SPA対応） */
 .result-card-fullscreen {
-    min-height: calc(100vh - 250px);
+    height: calc(100vh - 3rem);  /* 100vh - メインヘッダー高さ */
+    max-height: calc(100vh - 3rem);
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 
 .result-nav {
@@ -519,20 +521,31 @@ header h1 {
     color: var(--text-secondary);
 }
 
+.result-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+}
+
 .chart-container {
     height: 250px;
     margin-bottom: 20px;
 }
 
 .chart-container-large {
-    height: 350px;
     flex: 1;
-    min-height: 300px;
+    min-height: 0;  /* flexboxで縮小可能にする */
+    max-height: 40vh;  /* 最大高さを制限 */
 }
 
 /* 統計バー */
 .stats-summary {
     margin-top: 20px;
+    flex-shrink: 0;
+    max-height: 30vh;
+    overflow-y: auto;
 }
 
 .stat-item {
@@ -572,7 +585,8 @@ header h1 {
 
 /* テキスト回答一覧 */
 .text-responses {
-    max-height: 400px;
+    flex: 1;
+    min-height: 0;
     overflow-y: auto;
 }
 
@@ -1154,6 +1168,10 @@ header .event-name {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 0;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    align-content: start;
 }
 
 .image-tile {
