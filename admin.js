@@ -589,13 +589,11 @@ function calculateShouldShowChart() {
 function renderResults() {
     const container = document.getElementById('results-container');
     const loading = document.getElementById('loading');
-    const presentControls = document.getElementById('present-mode-controls');
 
     if (!selectedEventId) {
         container.innerHTML = '<p class="no-data">イベント管理でイベントを選択してください。</p>';
         loading.style.display = 'none';
         container.style.display = 'block';
-        presentControls.style.display = 'none';
         return;
     }
 
@@ -605,12 +603,8 @@ function renderResults() {
         container.innerHTML = '<p class="no-data">まだ質問が登録されていません。</p>';
         loading.style.display = 'none';
         container.style.display = 'block';
-        presentControls.style.display = 'none';
         return;
     }
-
-    // プレゼンモードコントロールを表示
-    presentControls.style.display = 'flex';
 
     // インデックスの範囲チェック
     if (currentResultIndex >= activeQuestions.length) {
