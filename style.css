@@ -489,11 +489,8 @@ header h1 {
 }
 
 .result-toolbar .question-text-large {
-    font-size: 1.2rem;
+    font-size: 1.5rem;
     font-weight: 600;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
 }
 
 .result-toolbar .result-response-count {
@@ -529,15 +526,15 @@ header h1 {
 
 .chart-container-large {
     flex: 1;
-    min-height: 0;  /* flexboxで縮小可能にする */
-    max-height: 40vh;  /* 最大高さを制限 */
+    min-height: 0;
+    max-height: 40vh;
+    margin-top: 12px;
 }
 
 /* 統計バー */
 .stats-summary {
     margin-top: 20px;
-    flex-shrink: 0;
-    max-height: 30vh;
+    flex: 1;
     overflow-y: auto;
 }
 
@@ -1590,7 +1587,7 @@ header .event-name {
 
 .view-content {
     flex: 1;
-    overflow-y: auto;
+    overflow-y: hidden;
     display: none;
 }
 
