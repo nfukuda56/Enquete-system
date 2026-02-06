@@ -689,20 +689,18 @@ function generateResultCard(question, questionResponses, index, totalQuestions, 
 
     return `
         <div class="result-card result-card-fullscreen">
-            <div class="result-nav">
+            <div class="result-toolbar">
                 <button class="btn btn-secondary result-nav-btn" onclick="prevResult()" ${prevDisabled}>
                     ← 前の質問
                 </button>
-                <span class="result-nav-indicator">${index + 1} / ${totalQuestions}</span>
+                <span class="question-number">Q${index + 1}</span>
+                <span class="question-text-large">${escapeHtml(question.question_text)}</span>
+                <span class="toolbar-spacer"></span>
+                <span class="result-response-count">${responseCount}件の回答</span>
                 <button class="btn btn-secondary result-nav-btn" onclick="nextResult()" ${nextDisabled}>
                     次の質問 →
                 </button>
             </div>
-            <div class="result-header">
-                <span class="question-number">Q${index + 1}</span>
-                <span class="question-text-large">${escapeHtml(question.question_text)}</span>
-            </div>
-            <div class="result-response-count">${responseCount}件の回答</div>
             <div class="result-content">
                 ${contentHTML}
             </div>
