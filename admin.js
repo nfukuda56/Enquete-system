@@ -519,6 +519,15 @@ function startRealtimeSubscription() {
                 await loadEvents();
             }
         )
+        .on('postgres_changes',
+            { event: '*', schema: 'public', table: 'admin_state' },
+            async (payload) => {
+                // 外部からの admin_state 変更（trigger.html等）を検知して同期
+                if (payload.new?.event_id === selectedEventId) {
+                    await loadAdminState();
+                }
+            }
+        )
         .subscribe();
 }
 
