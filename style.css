@@ -1596,6 +1596,31 @@ header .event-name {
     flex-direction: column;
 }
 
+/* QRコードモーダル */
+.qr-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+}
+
+.qr-modal-overlay.active {
+    display: flex;
+}
+
+.qr-modal-content {
+    background: white;
+    padding: 2rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
 /* 折り畳みセクション */
 .collapsible-section {
     background: white;

@@ -92,6 +92,33 @@ function updateSidebarQR() {
             colorLight: '#ffffff',
             correctLevel: QRCode.CorrectLevel.M
         });
+        qrContainer.style.cursor = 'pointer';
+        qrContainer.onclick = () => openQRModal(url);
+    }
+}
+
+// QRコードモーダル表示
+function openQRModal(url) {
+    const modal = document.getElementById('qr-modal');
+    const codeContainer = document.getElementById('qr-modal-code');
+    codeContainer.innerHTML = '';
+    new QRCode(codeContainer, {
+        text: url,
+        width: 300,
+        height: 300,
+        colorDark: '#000000',
+        colorLight: '#ffffff',
+        correctLevel: QRCode.CorrectLevel.M
+    });
+    modal.classList.add('active');
+}
+
+// QRコードモーダル閉じる
+function closeQRModal(event) {
+    const modal = document.getElementById('qr-modal');
+    // モーダルコンテンツ外（オーバーレイ）クリック時のみ閉じる
+    if (event.target === modal) {
+        modal.classList.remove('active');
     }
 }
 
