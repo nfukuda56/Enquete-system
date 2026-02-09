@@ -44,6 +44,10 @@
             function showResult(type, title, message) {
                 statusEl.className = 'status ' + type;
                 statusEl.innerHTML = '<h2>' + title + '</h2><p>' + message + '</p>';
+                // 成功時は自動でタブを閉じる（外部アプリから開かれた場合に有効）
+                if (type === 'success') {
+                    setTimeout(() => { window.close(); }, 500);
+                }
             }
 
             try {
