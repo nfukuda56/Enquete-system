@@ -58,6 +58,8 @@ function updateTopHeader() {
     const nameEl = document.getElementById('header-event-name');
     const dateEl = document.getElementById('header-event-date');
 
+    const clearBtn = document.getElementById('clear-responses-btn');
+
     if (selectedEventId && currentEvent) {
         nameEl.textContent = currentEvent.name;
         if (currentEvent.event_date) {
@@ -65,9 +67,11 @@ function updateTopHeader() {
         } else {
             dateEl.textContent = '';
         }
+        if (clearBtn) clearBtn.style.display = 'inline-block';
     } else {
         nameEl.textContent = 'イベントを選択してください';
         dateEl.textContent = '';
+        if (clearBtn) clearBtn.style.display = 'none';
     }
 }
 
@@ -483,6 +487,37 @@ async function loadResponses() {
         updateTotalCount();
     } catch (error) {
         console.error('回答読み込みエラー:', error);
+    }
+}
+
+// 回答一括クリア
+async function clearAllResponses() {
+    if (!selectedEventId || questions.length === 0) {
+        alert('イベントと質問が必要です。');
+        return;
+    }
+
+    if (!confirm('このイベントのすべての回答を削除しますか？\nこの操作は取り消せません。')) {
+        return;
+    }
+
+    try {
+        const questionIds = questions.map(q => q.id);
+
+        const { error } = await supabaseClient
+            .from('responses')
+            .delete()
+            .in('question_id', questionIds);
+
+        if (error) throw error;
+
+        responses = [];
+        renderResults();
+        updateTotalCount();
+        alert('すべての回答を削除しました。');
+    } catch (error) {
+        console.error('回答クリアエラー:', error);
+        alert('回答の削除に失敗しました。');
     }
 }
 
