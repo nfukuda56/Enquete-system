@@ -98,16 +98,44 @@ function updateDisplayControlUI() {
     }
 }
 
+// 管理者ポリシー確認モーダル
+let adminPolicyResolve = null;
+
+function showAdminPolicyModal(icon, title, bodyHTML, confirmLabel) {
+    document.getElementById('admin-policy-icon').textContent = icon;
+    document.getElementById('admin-policy-title').textContent = title;
+    document.getElementById('admin-policy-body').innerHTML = bodyHTML;
+    document.getElementById('admin-policy-confirm-btn').textContent = confirmLabel || '同意してONにする';
+    document.getElementById('admin-policy-modal').classList.add('active');
+    return new Promise(resolve => { adminPolicyResolve = resolve; });
+}
+
+function closeAdminPolicyModal(result) {
+    document.getElementById('admin-policy-modal').classList.remove('active');
+    if (adminPolicyResolve) {
+        adminPolicyResolve(result);
+        adminPolicyResolve = null;
+    }
+}
+
 // 自由記述の表示切り替え
 async function toggleTextDisplay() {
     if (!selectedEventId || !currentEvent) return;
     const newValue = !currentEvent.text_display_enabled;
 
-    if (newValue && !confirm(
-        '自由記述の表示をONにします。\n\n' +
-        '注意: 表示は場の責任を伴います。\n' +
-        '荒れた場合はいつでも停止できます。\n\nよろしいですか？'
-    )) return;
+    if (newValue) {
+        const agreed = await showAdminPolicyModal(
+            '📝',
+            '自由記述の表示をONにします',
+            '<ul>' +
+            '<li>参加者の自由記述が画面に表示されます</li>' +
+            '<li>表示は場の責任を伴います</li>' +
+            '<li>荒れた場合はいつでも停止できます</li>' +
+            '</ul>',
+            '同意してONにする'
+        );
+        if (!agreed) return;
+    }
 
     const { error } = await supabaseClient
         .from('events').update({ text_display_enabled: newValue }).eq('id', selectedEventId);
@@ -125,11 +153,19 @@ async function toggleImageDisplay() {
     if (!selectedEventId || !currentEvent) return;
     const newValue = !currentEvent.image_display_enabled;
 
-    if (newValue && !confirm(
-        '画像投稿の表示をONにします。\n\n' +
-        '警告: 画像には直接的・法的リスクがあります。\n' +
-        '不適切な投稿があった場合は即時停止してください。\n\nよろしいですか？'
-    )) return;
+    if (newValue) {
+        const agreed = await showAdminPolicyModal(
+            '🖼️',
+            '画像投稿の表示をONにします',
+            '<ul>' +
+            '<li>参加者の画像投稿が画面に表示されます</li>' +
+            '<li>画像には直接的・法的リスクがあります</li>' +
+            '<li>不適切な投稿があった場合は即時停止してください</li>' +
+            '</ul>',
+            '同意してONにする'
+        );
+        if (!agreed) return;
+    }
 
     const { error } = await supabaseClient
         .from('events').update({ image_display_enabled: newValue }).eq('id', selectedEventId);

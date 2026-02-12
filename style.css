@@ -1854,6 +1854,80 @@ header .event-name {
     content: '⚠ ';
 }
 
+/* 管理者ポリシー確認モーダル（全画面・プロジェクタ対応） */
+.policy-modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.75);
+    z-index: 2000;
+    justify-content: center;
+    align-items: center;
+}
+
+.policy-modal-overlay.active {
+    display: flex;
+}
+
+.policy-modal-card {
+    background: white;
+    border-radius: 20px;
+    padding: 60px 80px;
+    max-width: 900px;
+    width: 90vw;
+    text-align: center;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+
+.policy-modal-icon {
+    font-size: 5rem;
+    margin-bottom: 24px;
+}
+
+.policy-modal-card h2 {
+    font-size: 2.5rem;
+    margin-bottom: 32px;
+    color: var(--text-color);
+}
+
+.policy-modal-body {
+    text-align: left;
+    margin-bottom: 48px;
+}
+
+.policy-modal-body ul {
+    list-style: none;
+    padding: 0;
+}
+
+.policy-modal-body li {
+    padding: 16px 24px;
+    margin-bottom: 12px;
+    background: #FEF3C7;
+    border-radius: 10px;
+    font-size: 1.5rem;
+    color: #92400E;
+}
+
+.policy-modal-body li::before {
+    content: '⚠ ';
+}
+
+.policy-modal-actions {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+}
+
+.policy-modal-actions .btn-lg {
+    padding: 20px 48px;
+    font-size: 1.5rem;
+    border-radius: 12px;
+}
+
 /* 画像投稿警告バナー */
 .image-warning {
     background: #FEF3C7;

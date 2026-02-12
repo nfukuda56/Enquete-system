@@ -273,6 +273,19 @@
         </div>
     </div>
 
+    <!-- 管理者ポリシー確認モーダル（全画面・プロジェクタ対応） -->
+    <div class="policy-modal-overlay" id="admin-policy-modal">
+        <div class="policy-modal-card">
+            <div class="policy-modal-icon" id="admin-policy-icon"></div>
+            <h2 id="admin-policy-title"></h2>
+            <div class="policy-modal-body" id="admin-policy-body"></div>
+            <div class="policy-modal-actions">
+                <button class="btn btn-lg btn-secondary" onclick="closeAdminPolicyModal(false)">キャンセル</button>
+                <button class="btn btn-lg btn-primary" id="admin-policy-confirm-btn" onclick="closeAdminPolicyModal(true)">同意してONにする</button>
+            </div>
+        </div>
+    </div>
+
     <!-- QRコードモーダル -->
     <div class="qr-modal-overlay" id="qr-modal" onclick="closeQRModal(event)">
         <div class="qr-modal-content">
