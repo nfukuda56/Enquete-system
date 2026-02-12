@@ -687,50 +687,79 @@ async function submitAnswer() {
             .single();
 
         const needsModeration = question.question_type === 'text' || question.question_type === 'image';
-        const moderationStatus = needsModeration ? 'pending' : 'none';
-
         let responseId = null;
 
         if (existing) {
             responseId = existing.id;
+            // 基本の更新データ
             const updateData = { answer: answer };
+            // モデレーションカラムは存在すれば追加（なくても動作する）
             if (needsModeration) {
                 updateData.moderation_status = 'pending';
                 updateData.moderation_categories = null;
                 updateData.moderation_timestamp = null;
                 updateData.policy_agreed_at = policyAgreedAt;
             }
-            await supabaseClient
+            const { error: updateError } = await supabaseClient
                 .from('responses')
                 .update(updateData)
                 .eq('id', existing.id);
-        } else {
-            await supabaseClient
-                .from('responses')
-                .insert([{
-                    question_id: question.id,
-                    session_id: SESSION_ID,
-                    answer: answer,
-                    moderation_status: moderationStatus,
-                    policy_agreed_at: needsModeration ? policyAgreedAt : null
-                }]);
-            // IDを別途取得（モデレーション用）
-            if (needsModeration) {
-                const { data: justInserted } = await supabaseClient
+            if (updateError) {
+                // モデレーションカラムが原因の場合、基本データのみで再試行
+                console.warn('update with moderation failed, retrying basic:', updateError.message);
+                const { error: retryError } = await supabaseClient
                     .from('responses')
-                    .select('id')
-                    .eq('question_id', question.id)
-                    .eq('session_id', SESSION_ID)
-                    .order('created_at', { ascending: false })
-                    .limit(1)
-                    .single();
-                responseId = justInserted?.id;
+                    .update({ answer: answer })
+                    .eq('id', existing.id);
+                if (retryError) throw new Error(retryError.message);
+            }
+        } else {
+            // まずモデレーションカラム付きでINSERT
+            const insertData = {
+                question_id: question.id,
+                session_id: SESSION_ID,
+                answer: answer
+            };
+            if (needsModeration) {
+                insertData.moderation_status = 'pending';
+                insertData.policy_agreed_at = policyAgreedAt;
+            }
+            const { error: insertError } = await supabaseClient
+                .from('responses')
+                .insert([insertData]);
+            if (insertError) {
+                // モデレーションカラムが原因の場合、基本データのみで再試行
+                console.warn('insert with moderation failed, retrying basic:', insertError.message);
+                const { error: retryError } = await supabaseClient
+                    .from('responses')
+                    .insert([{
+                        question_id: question.id,
+                        session_id: SESSION_ID,
+                        answer: answer
+                    }]);
+                if (retryError) throw new Error(retryError.message);
+            }
+            // IDを別途取得（モデレーション用、失敗しても無視）
+            if (needsModeration) {
+                try {
+                    const { data: justInserted } = await supabaseClient
+                        .from('responses')
+                        .select('id')
+                        .eq('question_id', question.id)
+                        .eq('session_id', SESSION_ID)
+                        .order('created_at', { ascending: false })
+                        .limit(1)
+                        .single();
+                    responseId = justInserted?.id;
+                } catch (e) {
+                    console.warn('Response ID取得失敗（モデレーションスキップ）:', e);
+                }
             }
         }
 
-        // レート制限レコード記録 & AI モデレーション（fire-and-forget）
+        // レート制限レコード記録 & AI モデレーション（fire-and-forget、失敗しても無視）
         if (needsModeration) {
-            await recordRateLimit();
+            recordRateLimit();
             if (responseId) {
                 requestModeration(responseId);
             }
