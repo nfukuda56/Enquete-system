@@ -705,7 +705,7 @@ async function submitAnswer() {
                 .update(updateData)
                 .eq('id', existing.id);
         } else {
-            const { data: inserted } = await supabaseClient
+            await supabaseClient
                 .from('responses')
                 .insert([{
                     question_id: question.id,
@@ -713,10 +713,19 @@ async function submitAnswer() {
                     answer: answer,
                     moderation_status: moderationStatus,
                     policy_agreed_at: needsModeration ? policyAgreedAt : null
-                }])
-                .select('id')
-                .single();
-            responseId = inserted?.id;
+                }]);
+            // IDを別途取得（モデレーション用）
+            if (needsModeration) {
+                const { data: justInserted } = await supabaseClient
+                    .from('responses')
+                    .select('id')
+                    .eq('question_id', question.id)
+                    .eq('session_id', SESSION_ID)
+                    .order('created_at', { ascending: false })
+                    .limit(1)
+                    .single();
+                responseId = justInserted?.id;
+            }
         }
 
         // レート制限レコード記録 & AI モデレーション（fire-and-forget）
