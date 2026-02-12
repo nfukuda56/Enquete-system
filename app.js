@@ -319,6 +319,19 @@ async function checkRateLimit() {
     }
 }
 
+// AI モデレーションリクエスト（fire-and-forget）
+function requestModeration(responseId) {
+    const url = `${SUPABASE_URL}/functions/v1/moderate-content`;
+    fetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ response_id: responseId }),
+    }).catch(err => console.log('Moderation request failed (non-blocking):', err));
+}
+
 // レート制限レコードを記録
 async function recordRateLimit() {
     if (!currentQuestion || !eventId) return;
@@ -676,7 +689,10 @@ async function submitAnswer() {
         const needsModeration = question.question_type === 'text' || question.question_type === 'image';
         const moderationStatus = needsModeration ? 'pending' : 'none';
 
+        let responseId = null;
+
         if (existing) {
+            responseId = existing.id;
             const updateData = { answer: answer };
             if (needsModeration) {
                 updateData.moderation_status = 'pending';
@@ -689,7 +705,7 @@ async function submitAnswer() {
                 .update(updateData)
                 .eq('id', existing.id);
         } else {
-            await supabaseClient
+            const { data: inserted } = await supabaseClient
                 .from('responses')
                 .insert([{
                     question_id: question.id,
@@ -697,12 +713,18 @@ async function submitAnswer() {
                     answer: answer,
                     moderation_status: moderationStatus,
                     policy_agreed_at: needsModeration ? policyAgreedAt : null
-                }]);
+                }])
+                .select('id')
+                .single();
+            responseId = inserted?.id;
         }
 
-        // レート制限レコード記録
+        // レート制限レコード記録 & AI モデレーション（fire-and-forget）
         if (needsModeration) {
             await recordRateLimit();
+            if (responseId) {
+                requestModeration(responseId);
+            }
         }
 
         hasAnsweredCurrentQuestion = true;
