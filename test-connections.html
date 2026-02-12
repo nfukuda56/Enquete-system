@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>接続テスト - Enquete System</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; background: #f5f5f5; }
+        h1 { color: #333; }
+        .test-item { background: white; border-radius: 8px; padding: 16px; margin: 12px 0; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .test-item h3 { margin: 0 0 8px; font-size: 1rem; }
+        .status { padding: 4px 12px; border-radius: 4px; font-size: 0.85rem; font-weight: 600; display: inline-block; }
+        .status.pass { background: #D1FAE5; color: #047857; }
+        .status.fail { background: #FEE2E2; color: #991B1B; }
+        .status.warn { background: #FEF3C7; color: #92400E; }
+        .status.running { background: #DBEAFE; color: #1E40AF; }
+        .detail { margin-top: 8px; font-size: 0.85rem; color: #666; white-space: pre-wrap; word-break: break-all; }
+        .summary { margin-top: 24px; padding: 16px; border-radius: 8px; font-size: 1.1rem; font-weight: 600; }
+        .summary.all-pass { background: #D1FAE5; color: #047857; }
+        .summary.has-fail { background: #FEE2E2; color: #991B1B; }
+        button { background: #4F46E5; color: white; border: none; padding: 12px 24px; border-radius: 8px; font-size: 1rem; cursor: pointer; margin-top: 16px; }
+        button:hover { background: #4338CA; }
+    </style>
+</head>
+<body>
+    <h1>接続テスト</h1>
+    <p>各機能の接続状態を確認します。</p>
+    <button onclick="runAllTests()">テスト実行</button>
+    <div id="results"></div>
+    <div id="summary"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script>
+        const results = [];
+
+        function addResult(name, status, detail) {
+            results.push({ name, status, detail });
+            renderResults();
+        }
+
+        function updateResult(name, status, detail) {
+            const idx = results.findIndex(r => r.name === name);
+            if (idx >= 0) { results[idx] = { name, status, detail }; }
+            else { results.push({ name, status, detail }); }
+            renderResults();
+        }
+
+        function renderResults() {
+            const container = document.getElementById('results');
+            container.innerHTML = results.map(r => `
+                <div class="test-item">
+                    <h3>${r.name} <span class="status ${r.status}">${
+                        r.status === 'pass' ? 'PASS' :
+                        r.status === 'fail' ? 'FAIL' :
+                        r.status === 'warn' ? 'WARN' : 'RUNNING...'
+                    }</span></h3>
+                    ${r.detail ? `<div class="detail">${r.detail}</div>` : ''}
+                </div>
+            `).join('');
+
+            const summary = document.getElementById('summary');
+            const done = results.filter(r => r.status !== 'running');
+            if (done.length === results.length && results.length > 0) {
+                const fails = results.filter(r => r.status === 'fail').length;
+                const warns = results.filter(r => r.status === 'warn').length;
+                if (fails === 0) {
+                    summary.className = 'summary all-pass';
+                    summary.textContent = `全 ${results.length} テスト完了: ${results.length - warns} PASS, ${warns} WARN`;
+                } else {
+                    summary.className = 'summary has-fail';
+                    summary.textContent = `全 ${results.length} テスト完了: ${fails} FAIL, ${warns} WARN`;
+                }
+            }
+        }
+
+        async function runAllTests() {
+            results.length = 0;
+            document.getElementById('summary').innerHTML = '';
+
+            // 1. Supabase接続
+            await testSupabaseConnection();
+            // 2. eventsテーブル（表示制御カラム）
+            await testEventsColumns();
+            // 3. responsesテーブル（モデレーションカラム）
+            await testResponsesColumns();
+            // 4. rate_limitsテーブル
+            await testRateLimitsTable();
+            // 5. Edge Function (moderate-content)
+            await testEdgeFunction();
+            // 6. Realtime接続
+            await testRealtime();
+        }
+
+        // Test 1: Supabase基本接続
+        async function testSupabaseConnection() {
+            const name = '1. Supabase基本接続';
+            updateResult(name, 'running', '');
+            try {
+                const { data, error } = await supabaseClient.from('events').select('id').limit(1);
+                if (error) throw error;
+                updateResult(name, 'pass', `接続OK (SUPABASE_URL: ${SUPABASE_URL})`);
+            } catch (e) {
+                updateResult(name, 'fail', `エラー: ${e.message}`);
+            }
+        }
+
+        // Test 2: eventsテーブル - 表示制御カラム
+        async function testEventsColumns() {
+            const name = '2. eventsテーブル (表示制御カラム)';
+            updateResult(name, 'running', '');
+            try {
+                const { data, error } = await supabaseClient
+                    .from('events')
+                    .select('id, text_display_enabled, image_display_enabled')
+                    .limit(1);
+                if (error) throw error;
+                if (data && data.length > 0) {
+                    const ev = data[0];
+                    updateResult(name, 'pass',
+                        `text_display_enabled: ${ev.text_display_enabled}, image_display_enabled: ${ev.image_display_enabled}`);
+                } else {
+                    updateResult(name, 'pass', 'カラム存在確認OK（イベントデータなし）');
+                }
+            } catch (e) {
+                updateResult(name, 'fail', `カラムが存在しない可能性:\n${e.message}\n\n→ migration-add-post-control.sql を実行してください`);
+            }
+        }
+
+        // Test 3: responsesテーブル - モデレーションカラム
+        async function testResponsesColumns() {
+            const name = '3. responsesテーブル (モデレーションカラム)';
+            updateResult(name, 'running', '');
+            try {
+                const { data, error } = await supabaseClient
+                    .from('responses')
+                    .select('id, moderation_status, moderation_categories, moderation_timestamp, policy_agreed_at')
+                    .limit(1);
+                if (error) throw error;
+                updateResult(name, 'pass', 'moderation_status, moderation_categories, moderation_timestamp, policy_agreed_at 全カラムOK');
+            } catch (e) {
+                updateResult(name, 'fail', `カラムが存在しない可能性:\n${e.message}\n\n→ migration-add-post-control.sql を実行してください`);
+            }
+        }
+
+        // Test 4: rate_limitsテーブル
+        async function testRateLimitsTable() {
+            const name = '4. rate_limitsテーブル';
+            updateResult(name, 'running', '');
+            try {
+                const { data, error } = await supabaseClient
+                    .from('rate_limits')
+                    .select('id, session_id, event_id, question_type, submitted_at')
+                    .limit(1);
+                if (error) throw error;
+                updateResult(name, 'pass', 'テーブル存在・カラム構造OK');
+            } catch (e) {
+                updateResult(name, 'fail', `テーブルが存在しない可能性:\n${e.message}\n\n→ migration-add-post-control.sql を実行してください`);
+            }
+        }
+
+        // Test 5: Edge Function (moderate-content)
+        async function testEdgeFunction() {
+            const name = '5. Edge Function (moderate-content)';
+            updateResult(name, 'running', '');
+            try {
+                const url = `${SUPABASE_URL}/functions/v1/moderate-content`;
+                const res = await fetch(url, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                    },
+                    body: JSON.stringify({ response_id: -1 }),  // 存在しないID
+                });
+                const body = await res.json();
+                if (res.status === 404 && body.error === 'Response not found') {
+                    // 期待通り: Edge Functionは動作中、対象レスポンスがないだけ
+                    updateResult(name, 'pass', `Edge Function稼働中 (status: ${res.status}, response: ${JSON.stringify(body)})`);
+                } else if (res.status === 400) {
+                    updateResult(name, 'pass', `Edge Function稼働中 (status: ${res.status})`);
+                } else if (res.status === 500 && body.error === 'Moderation service not configured') {
+                    updateResult(name, 'warn', 'Edge Functionは稼働中だが OPENAI_API_KEY が未設定');
+                } else {
+                    updateResult(name, 'warn', `予期しないレスポンス: status=${res.status}, body=${JSON.stringify(body)}`);
+                }
+            } catch (e) {
+                updateResult(name, 'fail', `Edge Functionに接続できません:\n${e.message}\n\n→ Supabase DashboardでEdge Functionをデプロイしてください`);
+            }
+        }
+
+        // Test 6: Realtime接続
+        async function testRealtime() {
+            const name = '6. Realtime接続 (responses UPDATE)';
+            updateResult(name, 'running', '接続テスト中...');
+            try {
+                const channel = supabaseClient.channel('test-realtime');
+                const connected = await new Promise((resolve) => {
+                    const timeout = setTimeout(() => resolve(false), 5000);
+                    channel
+                        .on('postgres_changes',
+                            { event: 'UPDATE', schema: 'public', table: 'responses' },
+                            () => {}
+                        )
+                        .subscribe((status) => {
+                            if (status === 'SUBSCRIBED') {
+                                clearTimeout(timeout);
+                                resolve(true);
+                            }
+                        });
+                });
+                supabaseClient.removeChannel(channel);
+                if (connected) {
+                    updateResult(name, 'pass', 'Realtime購読 (responses UPDATE) 接続OK');
+                } else {
+                    updateResult(name, 'warn', 'Realtime接続タイムアウト（5秒）');
+                }
+            } catch (e) {
+                updateResult(name, 'fail', `Realtime接続エラー: ${e.message}`);
+            }
+        }
+    </script>
+</body>
+</html>
