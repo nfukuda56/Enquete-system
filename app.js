@@ -13,6 +13,10 @@ let policyAgreedAt = null;  // ポリシー同意日時
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;  // 60秒
 const RATE_LIMIT_MAX = 3;                 // 最大3回/分
 
+// 管理者セッション鮮度チェック
+let stalenessCheckInterval = null;
+const STALENESS_TIMEOUT_MS = 90 * 1000;  // 90秒（ハートビート30秒 × 3回分の猶予）
+
 // URLパラメータからイベントID取得
 function getEventIdFromUrl() {
     const params = new URLSearchParams(window.location.search);
@@ -140,9 +144,23 @@ function handleAdminState(state) {
     if (!state || !state.is_presenting || !state.current_question_id) {
         currentQuestion = null;
         hasAnsweredCurrentQuestion = false;
+        stopStalenessCheck();
         showWaitingScreen();
         return;
     }
+
+    // 管理者セッションの鮮度チェック（updated_at が古すぎないか）
+    if (state.updated_at && isAdminStateStale(state.updated_at)) {
+        console.log('admin_state が古い（タイムアウト）: updated_at =', state.updated_at);
+        currentQuestion = null;
+        hasAnsweredCurrentQuestion = false;
+        stopStalenessCheck();
+        showWaitingScreen();
+        return;
+    }
+
+    // プレゼン中なら定期的に鮮度チェックを開始
+    startStalenessCheck();
 
     const newQuestionId = state.current_question_id;
     const question = questions.find(q => q.id === newQuestionId);
@@ -168,6 +186,28 @@ function handleAdminState(state) {
     } else {
         // 入力なし → 即座に切り替え
         showQuestionById(newQuestionId);
+    }
+}
+
+// admin_state の updated_at がタイムアウト超過か判定
+function isAdminStateStale(updatedAt) {
+    const updated = new Date(updatedAt).getTime();
+    const now = Date.now();
+    return (now - updated) > STALENESS_TIMEOUT_MS;
+}
+
+// 定期的にadmin_stateの鮮度をチェック（30秒間隔）
+function startStalenessCheck() {
+    if (stalenessCheckInterval) return;  // 既に動作中
+    stalenessCheckInterval = setInterval(async () => {
+        await loadAdminState();  // DB から最新を取得して handleAdminState が鮮度判定
+    }, 30000);
+}
+
+function stopStalenessCheck() {
+    if (stalenessCheckInterval) {
+        clearInterval(stalenessCheckInterval);
+        stalenessCheckInterval = null;
     }
 }
 

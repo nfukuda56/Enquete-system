@@ -1525,6 +1525,13 @@ async function togglePresentMode() {
     isPresenting = !isPresenting;
     updatePresentModeUI();
     await syncAdminState();
+
+    // ハートビート制御
+    if (isPresenting) {
+        startHeartbeat();
+    } else {
+        stopHeartbeat();
+    }
 }
 
 // admin_state をDBに同期
@@ -1614,12 +1621,48 @@ function updatePresentModeUI() {
     }
 }
 
-// ページ離脱時のクリーンアップ
-window.addEventListener('beforeunload', async () => {
-    // プレゼンモード中ならページ離脱時に終了
+// ハートビート: プレゼン中は30秒ごとに updated_at を更新
+let heartbeatInterval = null;
+
+function startHeartbeat() {
+    stopHeartbeat();
+    heartbeatInterval = setInterval(async () => {
+        if (isPresenting && selectedEventId) {
+            await supabaseClient
+                .from('admin_state')
+                .update({ updated_at: new Date().toISOString() })
+                .eq('event_id', selectedEventId);
+        }
+    }, 30000); // 30秒間隔
+}
+
+function stopHeartbeat() {
+    if (heartbeatInterval) {
+        clearInterval(heartbeatInterval);
+        heartbeatInterval = null;
+    }
+}
+
+// ページ離脱時のクリーンアップ（fetch + keepalive で確実に送信）
+window.addEventListener('beforeunload', () => {
+    stopHeartbeat();
     if (isPresenting && selectedEventId) {
-        isPresenting = false;
-        await syncAdminState();
+        // fetch + keepalive: ページ閉じても送信が継続される
+        fetch(`${SUPABASE_URL}/rest/v1/admin_state?event_id=eq.${selectedEventId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                'apikey': SUPABASE_ANON_KEY,
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+                'Prefer': 'return=minimal'
+            },
+            body: JSON.stringify({
+                is_presenting: false,
+                current_question_id: null,
+                updated_at: new Date().toISOString()
+            }),
+            keepalive: true
+        }).catch(() => {});
     }
     stopRealtimeSubscription();
 });
