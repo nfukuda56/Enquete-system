@@ -19,14 +19,24 @@ Supabaseをバックエンドに使用したリアルタイムアンケートシ
 
 ```
 Enquete-system/
-├── index.html      # 参加者用アンケートページ
-├── admin.html      # 管理者用ダッシュボード
-├── app.js          # 参加者ページのロジック
-├── admin.js        # 管理ページのロジック
-├── config.js       # Supabase接続設定
-├── trigger.html    # PPT連携用トリガーページ
-├── style.css       # スタイルシート
-└── README.md       # このファイル
+├── index.html              # 参加者用アンケートページ
+├── admin.html              # 管理者用ダッシュボード
+├── app.js                  # 参加者ページのロジック
+├── admin.js                # 管理ページのロジック
+├── config.js               # Supabase接続設定
+├── trigger.html            # PPT連携用トリガーページ
+├── test-connections.html   # 接続診断ページ
+├── style.css               # スタイルシート
+├── doc/                    # ドキュメント
+│   ├── auth_login_plan.md  # アカウント制御・ログイン実装計画
+│   ├── post_control_requirements.md  # 投稿制御機能 要件定義書
+│   └── VERIFICATION.md     # 検証レポート
+├── sql/                    # データベース
+│   └── supabase-setup.sql  # Supabase セットアップSQL（統合版）
+├── supabase/               # Supabase Edge Functions
+│   └── functions/
+│       └── moderate-content/index.ts
+└── README.md
 ```
 
 ## セットアップ
@@ -35,83 +45,10 @@ Enquete-system/
 
 1. [Supabase](https://supabase.com) でアカウント作成・ログイン
 2. 新しいプロジェクトを作成
-3. SQL Editorで以下を実行してテーブルを作成:
+3. SQL Editorで `sql/supabase-setup.sql` の内容を貼り付けて実行
+   - テーブル、インデックス、RLSポリシー、Realtime、Storageバケットが一括作成されます
 
-```sql
--- イベントテーブル
-CREATE TABLE events (
-    id BIGSERIAL PRIMARY KEY,
-    name TEXT NOT NULL,
-    event_date DATE,
-    description TEXT,
-    is_active BOOLEAN DEFAULT true,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 質問テーブル
-CREATE TABLE questions (
-    id BIGSERIAL PRIMARY KEY,
-    event_id BIGINT REFERENCES events(id) ON DELETE CASCADE,
-    question_text TEXT NOT NULL,
-    question_type TEXT NOT NULL CHECK (question_type IN ('single', 'multiple', 'text', 'rating', 'image')),
-    options JSONB,
-    is_required BOOLEAN DEFAULT false,
-    is_active BOOLEAN DEFAULT true,
-    sort_order INTEGER DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 回答テーブル
-CREATE TABLE responses (
-    id BIGSERIAL PRIMARY KEY,
-    question_id BIGINT REFERENCES questions(id) ON DELETE CASCADE,
-    session_id TEXT NOT NULL,
-    answer TEXT,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- RLSポリシー設定
-ALTER TABLE events ENABLE ROW LEVEL SECURITY;
-ALTER TABLE questions ENABLE ROW LEVEL SECURITY;
-ALTER TABLE responses ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Enable all access for events" ON events FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Enable all access for questions" ON questions FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "Enable all access for responses" ON responses FOR ALL USING (true) WITH CHECK (true);
-
--- Realtime有効化
-ALTER PUBLICATION supabase_realtime ADD TABLE events;
-ALTER PUBLICATION supabase_realtime ADD TABLE questions;
-ALTER PUBLICATION supabase_realtime ADD TABLE responses;
-```
-
-### 2. Storage バケットの作成（画像アップロード用）
-
-1. Supabase Dashboard → **Storage** → **New bucket**
-2. バケット名: `survey-images`
-3. **Public bucket**: ON
-
-4. SQL Editorで以下を実行してStorageポリシーを設定:
-
-```sql
-CREATE POLICY "Allow public uploads" ON storage.objects
-FOR INSERT TO anon, authenticated
-WITH CHECK (bucket_id = 'survey-images');
-
-CREATE POLICY "Allow public read" ON storage.objects
-FOR SELECT TO anon, authenticated
-USING (bucket_id = 'survey-images');
-
-CREATE POLICY "Allow public update" ON storage.objects
-FOR UPDATE TO anon, authenticated
-USING (bucket_id = 'survey-images');
-
-CREATE POLICY "Allow public delete" ON storage.objects
-FOR DELETE TO anon, authenticated
-USING (bucket_id = 'survey-images');
-```
-
-### 3. config.jsの設定
+### 2. config.jsの設定
 
 Supabase Dashboard → **Settings** → **API** から以下を取得し、`config.js` を編集:
 
@@ -120,7 +57,7 @@ const SUPABASE_URL = 'https://あなたのプロジェクト.supabase.co';
 const SUPABASE_ANON_KEY = 'あなたのanon key';
 ```
 
-### 4. GitHub Pagesへデプロイ
+### 3. GitHub Pagesへデプロイ
 
 1. GitHubリポジトリにプッシュ
 2. Settings → Pages → Source から `main` ブランチを選択
