@@ -42,6 +42,13 @@
                 <h1 id="header-event-name">イベントを選択してください</h1>
                 <span class="header-event-date" id="header-event-date"></span>
                 <span style="flex:1"></span>
+                <div class="display-control-toolbar" id="display-control-toolbar" style="display:none">
+                    <span class="toolbar-label">自由記述:</span>
+                    <button class="btn btn-sm toggle-off" id="text-display-toggle" onclick="toggleTextDisplay()">OFF</button>
+                    <span class="toolbar-label">画像:</span>
+                    <button class="btn btn-sm toggle-off" id="image-display-toggle" onclick="toggleImageDisplay()">OFF</button>
+                    <button class="btn btn-sm btn-emergency-stop" onclick="emergencyStopDisplay()">緊急停止</button>
+                </div>
                 <button class="btn btn-danger btn-sm" id="clear-responses-btn"
                         onclick="clearAllResponses()" style="display:none">
                     回答一括クリア

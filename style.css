@@ -1670,3 +1670,198 @@ header .event-name {
         display: none;
     }
 }
+
+/* ========== 投稿制御機能 ========== */
+
+/* 表示制御ツールバー（ヘッダー内） */
+.display-control-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-right: 8px;
+}
+
+.display-control-toolbar .toolbar-label {
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.8);
+    white-space: nowrap;
+}
+
+/* トグルボタン: ON */
+.toggle-on {
+    background: var(--success-color) !important;
+    color: white !important;
+    border: none !important;
+    font-weight: 600;
+}
+
+.toggle-on:hover {
+    background: #059669 !important;
+}
+
+/* トグルボタン: OFF */
+.toggle-off {
+    background: #6B7280 !important;
+    color: white !important;
+    border: none !important;
+    font-weight: 600;
+}
+
+.toggle-off:hover {
+    background: #4B5563 !important;
+}
+
+/* 緊急停止ボタン */
+.btn-emergency-stop {
+    background: #DC2626 !important;
+    color: white !important;
+    border: none !important;
+    font-weight: 600;
+    margin-left: 8px;
+}
+
+.btn-emergency-stop:hover {
+    background: #B91C1C !important;
+}
+
+/* 表示OFF通知 */
+.display-off-notice {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    background: var(--bg-color);
+    border-radius: 8px;
+    border: 1px dashed var(--border-color);
+}
+
+/* モデレーションバッジ */
+.moderation-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.moderation-pending {
+    background: #FEF3C7;
+    color: #92400E;
+}
+
+.moderation-approved {
+    background: #D1FAE5;
+    color: #047857;
+}
+
+.moderation-blocked {
+    background: #FEE2E2;
+    color: #991B1B;
+}
+
+/* 回答メタ行（時刻＋バッジ＋ブロックボタン） */
+.response-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+/* 個別ブロックボタン（テキスト回答用） */
+.btn-block-response {
+    margin-left: auto;
+    padding: 2px 8px;
+    font-size: 0.75rem;
+    background: transparent;
+    color: var(--danger-color);
+    border: 1px solid var(--danger-color);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-block-response:hover {
+    background: var(--danger-color);
+    color: white;
+}
+
+/* 個別ブロックボタン（画像用） */
+.btn-block-image {
+    position: absolute;
+    bottom: 4px;
+    right: 4px;
+    padding: 2px 6px;
+    font-size: 0.7rem;
+    background: rgba(239, 68, 68, 0.85);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.image-tile {
+    position: relative;
+}
+
+.image-tile:hover .btn-block-image {
+    opacity: 1;
+}
+
+/* 審査待ちアイテム */
+.pending-moderation {
+    border-left: 3px solid #F59E0B;
+}
+
+/* 参加者画面: ポリシー同意カード */
+.policy-agreement-card {
+    background: var(--card-bg);
+    border-radius: 12px;
+    padding: 30px;
+    box-shadow: var(--shadow-lg);
+    text-align: center;
+    max-width: 500px;
+    margin: 0 auto;
+}
+
+.policy-agreement-card h2 {
+    font-size: 1.3rem;
+    margin-bottom: 16px;
+    color: var(--text-color);
+}
+
+.policy-agreement-card .policy-text {
+    text-align: left;
+    margin-bottom: 24px;
+}
+
+.policy-agreement-card .policy-text ul {
+    list-style: none;
+    padding: 0;
+}
+
+.policy-agreement-card .policy-text li {
+    padding: 8px 12px;
+    margin-bottom: 8px;
+    background: #FEF3C7;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: #92400E;
+}
+
+.policy-agreement-card .policy-text li::before {
+    content: '⚠ ';
+}
+
+/* 画像投稿警告バナー */
+.image-warning {
+    background: #FEF3C7;
+    border: 1px solid #FCD34D;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 12px;
+    font-size: 0.85rem;
+    color: #92400E;
+    text-align: center;
+}

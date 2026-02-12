@@ -60,6 +60,8 @@ function updateTopHeader() {
 
     const clearBtn = document.getElementById('clear-responses-btn');
 
+    const displayToolbar = document.getElementById('display-control-toolbar');
+
     if (selectedEventId && currentEvent) {
         nameEl.textContent = currentEvent.name;
         if (currentEvent.event_date) {
@@ -68,11 +70,122 @@ function updateTopHeader() {
             dateEl.textContent = '';
         }
         if (clearBtn) clearBtn.style.display = 'inline-block';
+        if (displayToolbar) displayToolbar.style.display = 'flex';
+        updateDisplayControlUI();
     } else {
         nameEl.textContent = 'イベントを選択してください';
         dateEl.textContent = '';
         if (clearBtn) clearBtn.style.display = 'none';
+        if (displayToolbar) displayToolbar.style.display = 'none';
     }
+}
+
+// 表示制御UIを更新
+function updateDisplayControlUI() {
+    const textBtn = document.getElementById('text-display-toggle');
+    const imageBtn = document.getElementById('image-display-toggle');
+    if (!currentEvent) return;
+
+    if (textBtn) {
+        textBtn.textContent = currentEvent.text_display_enabled ? 'ON' : 'OFF';
+        textBtn.className = currentEvent.text_display_enabled
+            ? 'btn btn-sm toggle-on' : 'btn btn-sm toggle-off';
+    }
+    if (imageBtn) {
+        imageBtn.textContent = currentEvent.image_display_enabled ? 'ON' : 'OFF';
+        imageBtn.className = currentEvent.image_display_enabled
+            ? 'btn btn-sm toggle-on' : 'btn btn-sm toggle-off';
+    }
+}
+
+// 自由記述の表示切り替え
+async function toggleTextDisplay() {
+    if (!selectedEventId || !currentEvent) return;
+    const newValue = !currentEvent.text_display_enabled;
+
+    if (newValue && !confirm(
+        '自由記述の表示をONにします。\n\n' +
+        '注意: 表示は場の責任を伴います。\n' +
+        '荒れた場合はいつでも停止できます。\n\nよろしいですか？'
+    )) return;
+
+    const { error } = await supabaseClient
+        .from('events').update({ text_display_enabled: newValue }).eq('id', selectedEventId);
+    if (error) { alert('設定の変更に失敗しました。'); return; }
+
+    currentEvent.text_display_enabled = newValue;
+    const ev = events.find(e => e.id === selectedEventId);
+    if (ev) ev.text_display_enabled = newValue;
+    updateDisplayControlUI();
+    renderResults();
+}
+
+// 画像の表示切り替え
+async function toggleImageDisplay() {
+    if (!selectedEventId || !currentEvent) return;
+    const newValue = !currentEvent.image_display_enabled;
+
+    if (newValue && !confirm(
+        '画像投稿の表示をONにします。\n\n' +
+        '警告: 画像には直接的・法的リスクがあります。\n' +
+        '不適切な投稿があった場合は即時停止してください。\n\nよろしいですか？'
+    )) return;
+
+    const { error } = await supabaseClient
+        .from('events').update({ image_display_enabled: newValue }).eq('id', selectedEventId);
+    if (error) { alert('設定の変更に失敗しました。'); return; }
+
+    currentEvent.image_display_enabled = newValue;
+    const ev = events.find(e => e.id === selectedEventId);
+    if (ev) ev.image_display_enabled = newValue;
+    updateDisplayControlUI();
+    renderResults();
+}
+
+// 緊急停止
+async function emergencyStopDisplay() {
+    if (!selectedEventId) return;
+    if (!confirm('自由記述・画像の表示を即時停止しますか？')) return;
+
+    const { error } = await supabaseClient
+        .from('events')
+        .update({ text_display_enabled: false, image_display_enabled: false })
+        .eq('id', selectedEventId);
+    if (error) { alert('緊急停止に失敗しました。'); return; }
+
+    currentEvent.text_display_enabled = false;
+    currentEvent.image_display_enabled = false;
+    const ev = events.find(e => e.id === selectedEventId);
+    if (ev) { ev.text_display_enabled = false; ev.image_display_enabled = false; }
+    updateDisplayControlUI();
+    renderResults();
+}
+
+// 個別回答をブロック
+async function blockResponse(responseId) {
+    if (!confirm('この投稿を非表示にしますか？')) return;
+
+    const { error } = await supabaseClient
+        .from('responses')
+        .update({
+            moderation_status: 'blocked',
+            moderation_timestamp: new Date().toISOString()
+        })
+        .eq('id', responseId);
+
+    if (error) { alert('操作に失敗しました。'); return; }
+
+    const response = responses.find(r => r.id === responseId);
+    if (response) {
+        response.moderation_status = 'blocked';
+    }
+    renderResults();
+}
+
+// モデレーションステータスラベル
+function getModerationLabel(status) {
+    const labels = { none: '', pending: '審査待ち', approved: '承認', blocked: 'ブロック' };
+    return labels[status] || '';
 }
 
 // サイドバーQRコードを更新
@@ -566,6 +679,17 @@ function startRealtimeSubscription() {
             }
         )
         .on('postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'responses' },
+            (payload) => {
+                // moderation_status 変更等をリアルタイム反映
+                const idx = responses.findIndex(r => r.id === payload.new.id);
+                if (idx >= 0) {
+                    responses[idx] = payload.new;
+                    renderResults();
+                }
+            }
+        )
+        .on('postgres_changes',
             { event: '*', schema: 'public', table: 'questions' },
             async (payload) => {
                 // 選択中イベントの質問変更のみ処理
@@ -781,15 +905,24 @@ function generateResultCard(question, questionResponses, index, totalQuestions, 
 
 // テキスト回答一覧
 function generateTextResponses(questionResponses) {
-    if (questionResponses.length === 0) {
+    if (!currentEvent?.text_display_enabled) {
+        return '<p class="display-off-notice">自由記述の表示がOFFです（ヘッダーのトグルで切り替え）</p>';
+    }
+
+    const visible = questionResponses.filter(r => r.moderation_status !== 'blocked');
+    if (visible.length === 0) {
         return '<p class="no-responses">まだ回答がありません</p>';
     }
 
     return `
         <div class="text-responses">
-            ${questionResponses.map(r => `
-                <div class="text-response-item">
-                    <span class="response-time">${formatTime(r.created_at)}</span>
+            ${visible.map(r => `
+                <div class="text-response-item ${r.moderation_status === 'pending' ? 'pending-moderation' : ''}">
+                    <div class="response-meta">
+                        <span class="response-time">${formatTime(r.created_at)}</span>
+                        ${r.moderation_status !== 'none' ? `<span class="moderation-badge moderation-${r.moderation_status}">${getModerationLabel(r.moderation_status)}</span>` : ''}
+                        <button class="btn-block-response" onclick="blockResponse(${r.id})">非表示</button>
+                    </div>
                     <p>${escapeHtml(r.answer)}</p>
                 </div>
             `).join('')}
@@ -799,18 +932,24 @@ function generateTextResponses(questionResponses) {
 
 // 画像ギャラリー表示
 function generateImageGallery(questionResponses) {
-    if (questionResponses.length === 0) {
+    if (!currentEvent?.image_display_enabled) {
+        return '<p class="display-off-notice">画像投稿の表示がOFFです（ヘッダーのトグルで切り替え）</p>';
+    }
+
+    const visible = questionResponses.filter(r => r.moderation_status !== 'blocked');
+    if (visible.length === 0) {
         return '<p class="no-responses">まだ回答がありません</p>';
     }
 
     return `
         <div class="image-gallery">
-            ${questionResponses.map(r => `
+            ${visible.map(r => `
                 <div class="image-tile">
                     <img src="${escapeHtml(r.answer)}"
                          alt="投稿画像"
                          loading="lazy"
                          onclick="openImageModal('${escapeHtml(r.answer)}')">
+                    <button class="btn-block-image" onclick="event.stopPropagation();blockResponse(${r.id})">非表示</button>
                 </div>
             `).join('')}
         </div>

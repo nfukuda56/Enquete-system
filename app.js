@@ -8,6 +8,11 @@ let eventInfo = null;
 let realtimeChannel = null;
 let hasAnsweredCurrentQuestion = false;  // 現在の質問に回答済みかどうか
 
+// 投稿制御
+let policyAgreedAt = null;  // ポリシー同意日時
+const RATE_LIMIT_WINDOW_MS = 60 * 1000;  // 60秒
+const RATE_LIMIT_MAX = 3;                 // 最大3回/分
+
 // URLパラメータからイベントID取得
 function getEventIdFromUrl() {
     const params = new URLSearchParams(window.location.search);
@@ -247,6 +252,18 @@ function showQuestionById(questionId) {
     // 全エリアを非表示
     hideAllAreas();
 
+    // text/image 質問でポリシー未同意の場合、同意画面を表示
+    if ((question.question_type === 'text' || question.question_type === 'image') && !policyAgreedAt) {
+        // sessionStorage から復元を試みる
+        const stored = sessionStorage.getItem('policy_agreed_at');
+        if (stored) {
+            policyAgreedAt = stored;
+        } else {
+            document.getElementById('policy-agreement-area').style.display = 'block';
+            return;
+        }
+    }
+
     // 質問エリアを表示
     document.getElementById('question-area').style.display = 'block';
 
@@ -264,11 +281,55 @@ function showQuestionById(questionId) {
 
 // 全エリアを非表示
 function hideAllAreas() {
-    const areas = ['loading', 'waiting-area', 'question-area', 'answered-area', 'complete', 'no-questions', 'no-event', 'event-not-found', 'error-message'];
+    const areas = ['loading', 'waiting-area', 'question-area', 'answered-area', 'complete', 'no-questions', 'no-event', 'event-not-found', 'error-message', 'policy-agreement-area'];
     areas.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
+}
+
+// ポリシーに同意して質問を表示
+function agreeToPolicyAndShow() {
+    policyAgreedAt = new Date().toISOString();
+    sessionStorage.setItem('policy_agreed_at', policyAgreedAt);
+    if (currentQuestion) {
+        showQuestionById(currentQuestion.id);
+    }
+}
+
+// レート制限チェック
+async function checkRateLimit() {
+    if (!currentQuestion || !eventId) return true;
+    const type = currentQuestion.question_type;
+    if (type !== 'text' && type !== 'image') return true;
+
+    try {
+        const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_MS).toISOString();
+        const { data, error } = await supabaseClient
+            .from('rate_limits')
+            .select('id')
+            .eq('session_id', SESSION_ID)
+            .eq('event_id', eventId)
+            .gte('submitted_at', windowStart);
+
+        if (error) return true; // fail-open
+        return (data || []).length < RATE_LIMIT_MAX;
+    } catch {
+        return true;
+    }
+}
+
+// レート制限レコードを記録
+async function recordRateLimit() {
+    if (!currentQuestion || !eventId) return;
+    const type = currentQuestion.question_type;
+    if (type !== 'text' && type !== 'image') return;
+
+    await supabaseClient.from('rate_limits').insert([{
+        session_id: SESSION_ID,
+        event_id: eventId,
+        question_type: type
+    }]).catch(() => {});
 }
 
 // 待機画面を表示
@@ -376,6 +437,9 @@ const IMAGE_CONFIG = {
 // 画像アップロード
 function generateImageUploadHTML(question) {
     return `
+        <div class="post-warning image-warning">
+            <strong>注意:</strong> 投稿された画像は他の参加者に公開される場合があります。不適切な画像は表示されません。
+        </div>
         <div class="image-upload-container">
             <input type="file"
                    name="answer"
@@ -546,6 +610,16 @@ async function submitAnswer() {
     submitBtn.textContent = '送信中...';
 
     try {
+        // text/image のレート制限チェック
+        if (question.question_type === 'text' || question.question_type === 'image') {
+            const allowed = await checkRateLimit();
+            if (!allowed) {
+                alert('投稿が多すぎます。しばらくお待ちください。');
+                submitBtn.disabled = false;
+                submitBtn.textContent = '回答を送信';
+                return;
+            }
+        }
         // 画像の場合はリサイズしてStorageにアップロード
         if (question.question_type === 'image' && answer instanceof File) {
             submitBtn.textContent = '画像を処理中...';
@@ -599,10 +673,20 @@ async function submitAnswer() {
             .eq('session_id', SESSION_ID)
             .single();
 
+        const needsModeration = question.question_type === 'text' || question.question_type === 'image';
+        const moderationStatus = needsModeration ? 'pending' : 'none';
+
         if (existing) {
+            const updateData = { answer: answer };
+            if (needsModeration) {
+                updateData.moderation_status = 'pending';
+                updateData.moderation_categories = null;
+                updateData.moderation_timestamp = null;
+                updateData.policy_agreed_at = policyAgreedAt;
+            }
             await supabaseClient
                 .from('responses')
-                .update({ answer: answer })
+                .update(updateData)
                 .eq('id', existing.id);
         } else {
             await supabaseClient
@@ -610,8 +694,15 @@ async function submitAnswer() {
                 .insert([{
                     question_id: question.id,
                     session_id: SESSION_ID,
-                    answer: answer
+                    answer: answer,
+                    moderation_status: moderationStatus,
+                    policy_agreed_at: needsModeration ? policyAgreedAt : null
                 }]);
+        }
+
+        // レート制限レコード記録
+        if (needsModeration) {
+            await recordRateLimit();
         }
 
         hasAnsweredCurrentQuestion = true;
