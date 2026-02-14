@@ -895,6 +895,13 @@ function skipQuestion() {
     }
 }
 
+// 再回答（送信済み画面から質問表示に戻る）
+function reAnswerQuestion() {
+    if (currentQuestion) {
+        showQuestionById(currentQuestion.id);
+    }
+}
+
 // 最初から回答（使用しない - プレゼンモードでは管理者が制御）
 function restartSurvey() {
     location.reload();
