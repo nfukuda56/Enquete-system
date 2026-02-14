@@ -954,12 +954,27 @@ function generateResultCard(question, questionResponses, index, totalQuestions, 
         contentHTML = generateImageGallery(questionResponses);
     } else if (shouldShowChart) {
         // 回答率30%超過: グラフ表示
-        contentHTML = `
-            <div class="chart-container chart-container-large">
-                <canvas id="chart-${question.id}"></canvas>
-            </div>
-            ${generateStatsSummary(question, questionResponses)}
-        `;
+        if (question.question_type === 'rating') {
+            // 棒グラフ: 従来通り縦並び
+            contentHTML = `
+                <div class="chart-container chart-container-large">
+                    <canvas id="chart-${question.id}"></canvas>
+                </div>
+                ${generateStatsSummary(question, questionResponses)}
+            `;
+        } else {
+            // 円グラフ: 左に円グラフ、右にバーチャート（2:1）
+            contentHTML = `
+                <div class="chart-layout-horizontal">
+                    <div class="chart-container-left">
+                        <canvas id="chart-${question.id}"></canvas>
+                    </div>
+                    <div class="chart-container-right">
+                        ${generateStatsSummary(question, questionResponses)}
+                    </div>
+                </div>
+            `;
+        }
     } else {
         // 回答率30%以下: メッセージのみ表示（グラフ・統計バー非表示）
         contentHTML = `
@@ -1195,7 +1210,7 @@ function renderChart(question) {
                         enabled: false
                     },
                     datalabels: {
-                        color: '#fff',
+                        color: '#000',
                         font: {
                             weight: 'bold',
                             size: 14
