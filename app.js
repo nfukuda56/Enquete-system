@@ -464,14 +464,17 @@ function generateTextInputHTML(question) {
 
 // 5段階評価
 function generateRatingHTML(question) {
-    const labels = ['とても不満', '不満', '普通', '満足', 'とても満足'];
+    // optionsがあればそれを使用、なければデフォルト
+    const labels = question.options && question.options.length === 5
+        ? question.options
+        : ['とても不満', '不満', '普通', '満足', 'とても満足'];
     return `
         <div class="rating-container">
             ${[1, 2, 3, 4, 5].map(value => `
                 <label class="rating-label">
                     <input type="radio" name="answer" value="${value}">
                     <span class="rating-star" data-value="${value}">${value}</span>
-                    <span class="rating-text">${labels[value - 1]}</span>
+                    <span class="rating-text">${escapeHtml(labels[value - 1])}</span>
                 </label>
             `).join('')}
         </div>

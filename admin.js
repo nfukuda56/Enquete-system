@@ -1074,6 +1074,7 @@ function calculateStats(question, questionResponses) {
     const counts = {};
 
     if (question.question_type === 'rating') {
+        // ratingタイプ: 1-5の数値をキーとして使用
         [1, 2, 3, 4, 5].forEach(v => counts[v] = 0);
     } else if (question.options) {
         question.options.forEach(opt => counts[opt] = 0);
@@ -1099,16 +1100,21 @@ function calculateStats(question, questionResponses) {
 
     const total = questionResponses.length || 1;
     return Object.entries(counts).map(([label, count]) => ({
-        label: question.question_type === 'rating' ? getRatingLabel(label) : label,
+        label: question.question_type === 'rating' ? getRatingLabel(label, question.options) : label,
         count,
         percentage: (count / total) * 100
     }));
 }
 
-// 評価ラベル取得
-function getRatingLabel(value) {
-    const labels = { '1': '1 (とても不満)', '2': '2 (不満)', '3': '3 (普通)', '4': '4 (満足)', '5': '5 (とても満足)' };
-    return labels[value] || value;
+// 評価ラベル取得（optionsがあればそれを使用）
+function getRatingLabel(value, options) {
+    const idx = parseInt(value) - 1;
+    if (options && options[idx]) {
+        return options[idx];
+    }
+    // デフォルトラベル
+    const defaultLabels = { '1': 'とても不満', '2': '不満', '3': '普通', '4': '満足', '5': 'とても満足' };
+    return defaultLabels[value] || value;
 }
 
 // グラフ描画
@@ -1125,28 +1131,80 @@ function renderChart(question) {
     }
 
     const ctx = canvas.getContext('2d');
-    charts[question.id] = new Chart(ctx, {
-        type: question.question_type === 'rating' ? 'bar' : 'doughnut',
-        data: {
-            labels: stats.map(s => s.label),
-            datasets: [{
-                data: stats.map(s => s.count),
-                backgroundColor: [
-                    '#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
-                    '#EC4899', '#06B6D4', '#84CC16'
-                ]
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: question.question_type === 'rating' ? 'top' : 'right'
+    const isBarChart = question.question_type === 'rating';
+
+    if (isBarChart) {
+        // 棒グラフ: 凡例非表示、X軸にラベル表示
+        charts[question.id] = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: stats.map(s => s.label),
+                datasets: [{
+                    data: stats.map(s => s.count),
+                    backgroundColor: [
+                        '#EF4444', '#F59E0B', '#6B7280', '#10B981', '#4F46E5'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false  // 凡例非表示
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            font: { size: 12 }
+                        }
+                    },
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            stepSize: 1
+                        }
+                    }
                 }
             }
-        }
-    });
+        });
+    } else {
+        // 円グラフ: 凡例非表示、グラフ最大化
+        charts[question.id] = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: stats.map(s => s.label),
+                datasets: [{
+                    data: stats.map(s => s.count),
+                    backgroundColor: [
+                        '#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
+                        '#EC4899', '#06B6D4', '#84CC16'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        display: false  // 凡例非表示でグラフ最大化
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                return `${label}: ${value}件 (${percentage}%)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+    }
 }
 
 // 質問フォーム設定
@@ -1176,7 +1234,21 @@ function closeAddQuestionModal() {
 function toggleOptionsInput() {
     const type = document.getElementById('question-type').value;
     const optionsGroup = document.getElementById('options-group');
-    optionsGroup.style.display = (type === 'single' || type === 'multiple') ? 'block' : 'none';
+    const optionsTextarea = document.getElementById('question-options');
+
+    if (type === 'single' || type === 'multiple') {
+        optionsGroup.style.display = 'block';
+        optionsTextarea.placeholder = 'とても満足\n満足\n普通\n不満\nとても不満';
+    } else if (type === 'rating') {
+        optionsGroup.style.display = 'block';
+        optionsTextarea.placeholder = 'とても不満\n不満\n普通\n満足\nとても満足';
+        // デフォルト値をセット（空の場合のみ）
+        if (!optionsTextarea.value.trim()) {
+            optionsTextarea.value = 'とても不満\n不満\n普通\n満足\nとても満足';
+        }
+    } else {
+        optionsGroup.style.display = 'none';
+    }
 }
 
 // 質問追加
@@ -1201,6 +1273,12 @@ async function addQuestion() {
         options = optionsText.split('\n').map(o => o.trim()).filter(o => o);
         if (options.length < 2) {
             alert('選択肢は2つ以上入力してください。');
+            return;
+        }
+    } else if (type === 'rating') {
+        options = optionsText.split('\n').map(o => o.trim()).filter(o => o);
+        if (options.length !== 5) {
+            alert('5段階評価は5つの選択肢を入力してください。');
             return;
         }
     }
@@ -1493,7 +1571,12 @@ function hideEditQuestionModal() {
 function toggleEditOptionsInput() {
     const type = document.getElementById('edit-question-type').value;
     const optionsGroup = document.getElementById('edit-options-group');
-    optionsGroup.style.display = (type === 'single' || type === 'multiple') ? 'block' : 'none';
+
+    if (type === 'single' || type === 'multiple' || type === 'rating') {
+        optionsGroup.style.display = 'block';
+    } else {
+        optionsGroup.style.display = 'none';
+    }
 }
 
 // 編集フォーム送信処理
@@ -1535,6 +1618,12 @@ async function saveQuestionEdit() {
         options = optionsText.split('\n').map(o => o.trim()).filter(o => o);
         if (options.length < 2) {
             alert('選択肢は2つ以上入力してください。');
+            return;
+        }
+    } else if (type === 'rating') {
+        options = optionsText.split('\n').map(o => o.trim()).filter(o => o);
+        if (options.length !== 5) {
+            alert('5段階評価は5つの選択肢を入力してください。');
             return;
         }
     }
