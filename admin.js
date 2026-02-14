@@ -1172,7 +1172,7 @@ function renderChart(question) {
                 scales: {
                     x: {
                         ticks: {
-                            font: { size: 12 }
+                            font: { size: 24 }
                         }
                     },
                     y: {
@@ -1213,7 +1213,7 @@ function renderChart(question) {
                         color: '#000',
                         font: {
                             weight: 'bold',
-                            size: 14
+                            size: 28
                         },
                         formatter: function(value, context) {
                             const label = context.chart.data.labels[context.dataIndex];
