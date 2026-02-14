@@ -184,10 +184,17 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="edit-question-required">
-                        <input type="checkbox" id="edit-question-required">
-                        必須回答
-                    </label>
+                    <label>重複送信時の動作</label>
+                    <div class="radio-group">
+                        <label class="radio-label-inline">
+                            <input type="radio" name="edit-duplicate-mode" value="overwrite" id="edit-duplicate-overwrite">
+                            回答更新
+                        </label>
+                        <label class="radio-label-inline">
+                            <input type="radio" name="edit-duplicate-mode" value="append" id="edit-duplicate-append">
+                            重複回答可
+                        </label>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn btn-primary">保存</button>
@@ -288,10 +295,17 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="question-required">
-                        <input type="checkbox" id="question-required" checked>
-                        必須回答
-                    </label>
+                    <label>重複送信時の動作</label>
+                    <div class="radio-group">
+                        <label class="radio-label-inline">
+                            <input type="radio" name="duplicate-mode" value="overwrite" checked>
+                            回答更新
+                        </label>
+                        <label class="radio-label-inline">
+                            <input type="radio" name="duplicate-mode" value="append">
+                            重複回答可
+                        </label>
+                    </div>
                 </div>
 
                 <button type="submit" class="btn btn-primary" id="add-question-btn">質問を追加</button>

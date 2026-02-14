@@ -729,46 +729,80 @@ async function submitAnswer() {
         const needsModeration = question.question_type === 'text' || question.question_type === 'image';
         let responseId = null;
 
+        // 挿入用データを準備
+        const insertData = {
+            question_id: question.id,
+            session_id: SESSION_ID,
+            answer: answer
+        };
+        if (needsModeration) {
+            insertData.moderation_status = 'pending';
+            insertData.policy_agreed_at = policyAgreedAt;
+        }
+
         if (existing) {
-            responseId = existing.id;
-            // 基本の更新データ
-            const updateData = { answer: answer };
-            // モデレーションカラムは存在すれば追加（なくても動作する）
-            if (needsModeration) {
-                updateData.moderation_status = 'pending';
-                updateData.moderation_categories = null;
-                updateData.moderation_timestamp = null;
-                updateData.policy_agreed_at = policyAgreedAt;
-            }
-            const { error: updateError } = await supabaseClient
-                .from('responses')
-                .update(updateData)
-                .eq('id', existing.id);
-            if (updateError) {
-                // モデレーションカラムが原因の場合、基本データのみで再試行
-                console.warn('update with moderation failed, retrying basic:', updateError.message);
-                const { error: retryError } = await supabaseClient
+            // 重複送信モードに応じて処理を分岐
+            if (question.duplicate_mode === 'append') {
+                // 追加モード: 新規レコードとして追加
+                const { error: insertError } = await supabaseClient
                     .from('responses')
-                    .update({ answer: answer })
+                    .insert([insertData]);
+                if (insertError) {
+                    console.warn('insert with moderation failed, retrying basic:', insertError.message);
+                    const { error: retryError } = await supabaseClient
+                        .from('responses')
+                        .insert([{
+                            question_id: question.id,
+                            session_id: SESSION_ID,
+                            answer: answer
+                        }]);
+                    if (retryError) throw new Error(retryError.message);
+                }
+                // IDを別途取得（モデレーション用、失敗しても無視）
+                if (needsModeration) {
+                    try {
+                        const { data: justInserted } = await supabaseClient
+                            .from('responses')
+                            .select('id')
+                            .eq('question_id', question.id)
+                            .eq('session_id', SESSION_ID)
+                            .order('created_at', { ascending: false })
+                            .limit(1)
+                            .single();
+                        responseId = justInserted?.id;
+                    } catch (e) {
+                        console.warn('Response ID取得失敗（モデレーションスキップ）:', e);
+                    }
+                }
+            } else {
+                // 上書きモード: 既存レコードを更新（デフォルト動作）
+                responseId = existing.id;
+                const updateData = { answer: answer };
+                if (needsModeration) {
+                    updateData.moderation_status = 'pending';
+                    updateData.moderation_categories = null;
+                    updateData.moderation_timestamp = null;
+                    updateData.policy_agreed_at = policyAgreedAt;
+                }
+                const { error: updateError } = await supabaseClient
+                    .from('responses')
+                    .update(updateData)
                     .eq('id', existing.id);
-                if (retryError) throw new Error(retryError.message);
+                if (updateError) {
+                    console.warn('update with moderation failed, retrying basic:', updateError.message);
+                    const { error: retryError } = await supabaseClient
+                        .from('responses')
+                        .update({ answer: answer })
+                        .eq('id', existing.id);
+                    if (retryError) throw new Error(retryError.message);
+                }
             }
         } else {
-            // まずモデレーションカラム付きでINSERT
-            const insertData = {
-                question_id: question.id,
-                session_id: SESSION_ID,
-                answer: answer
-            };
-            if (needsModeration) {
-                insertData.moderation_status = 'pending';
-                insertData.policy_agreed_at = policyAgreedAt;
-            }
+            // 初回送信: 常に新規追加
             const { error: insertError } = await supabaseClient
                 .from('responses')
                 .insert([insertData]);
             if (insertError) {
-                // モデレーションカラムが原因の場合、基本データのみで再試行
                 console.warn('insert with moderation failed, retrying basic:', insertError.message);
                 const { error: retryError } = await supabaseClient
                     .from('responses')

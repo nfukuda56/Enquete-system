@@ -1189,7 +1189,7 @@ async function addQuestion() {
     const text = document.getElementById('question-text').value.trim();
     const type = document.getElementById('question-type').value;
     const optionsText = document.getElementById('question-options').value;
-    const isRequired = document.getElementById('question-required').checked;
+    const duplicateMode = document.querySelector('input[name="duplicate-mode"]:checked').value;
 
     if (!text) {
         alert('質問文を入力してください。');
@@ -1213,9 +1213,10 @@ async function addQuestion() {
             question_text: text,
             question_type: type,
             options: options,
-            is_required: isRequired,
+            is_required: false,  // 常にfalse（互換性維持）
             is_active: true,
-            sort_order: maxOrder
+            sort_order: maxOrder,
+            duplicate_mode: duplicateMode
         };
 
         const { data, error } = await supabaseClient
@@ -1265,7 +1266,9 @@ function renderQuestionsList() {
             <div class="question-info">
                 <span class="question-type-badge">${getTypeLabel(q.question_type)}</span>
                 <span class="question-text">${escapeHtml(q.question_text)}</span>
-                ${q.is_required ? '<span class="required-badge">必須</span>' : ''}
+                <span class="duplicate-mode-badge ${q.duplicate_mode === 'append' ? 'append' : 'overwrite'}">
+                    ${q.duplicate_mode === 'append' ? '重複回答可' : '回答更新'}
+                </span>
             </div>
             <div class="question-actions">
                 <button class="btn btn-sm btn-warning" onclick="clearQuestionResponses(${q.id})">
@@ -1459,7 +1462,13 @@ function editQuestion(id) {
     document.getElementById('edit-question-id').value = question.id;
     document.getElementById('edit-question-text').value = question.question_text;
     document.getElementById('edit-question-type').value = question.question_type;
-    document.getElementById('edit-question-required').checked = question.is_required;
+
+    // 重複送信モードをセット
+    if (question.duplicate_mode === 'append') {
+        document.getElementById('edit-duplicate-append').checked = true;
+    } else {
+        document.getElementById('edit-duplicate-overwrite').checked = true;
+    }
 
     // 選択肢をセット
     if (question.options && question.options.length > 0) {
@@ -1514,7 +1523,7 @@ async function saveQuestionEdit() {
     const text = document.getElementById('edit-question-text').value.trim();
     const type = document.getElementById('edit-question-type').value;
     const optionsText = document.getElementById('edit-question-options').value;
-    const isRequired = document.getElementById('edit-question-required').checked;
+    const duplicateMode = document.querySelector('input[name="edit-duplicate-mode"]:checked').value;
 
     if (!text) {
         alert('質問文を入力してください。');
@@ -1537,7 +1546,8 @@ async function saveQuestionEdit() {
                 question_text: text,
                 question_type: type,
                 options: options,
-                is_required: isRequired
+                is_required: false,  // 常にfalse
+                duplicate_mode: duplicateMode
             })
             .eq('id', id);
 
@@ -1549,7 +1559,8 @@ async function saveQuestionEdit() {
             question.question_text = text;
             question.question_type = type;
             question.options = options;
-            question.is_required = isRequired;
+            question.is_required = false;
+            question.duplicate_mode = duplicateMode;
         }
 
         renderQuestionsList();

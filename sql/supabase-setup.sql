@@ -48,8 +48,12 @@ CREATE TABLE IF NOT EXISTS questions (
     is_required BOOLEAN DEFAULT true,
     is_active BOOLEAN DEFAULT true,
     sort_order INTEGER DEFAULT 0,
+    duplicate_mode TEXT DEFAULT 'overwrite',  -- 'overwrite' (上書き) または 'append' (追加)
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 既存テーブルへのカラム追加（マイグレーション用）
+ALTER TABLE questions ADD COLUMN IF NOT EXISTS duplicate_mode TEXT DEFAULT 'overwrite';
 
 COMMENT ON TABLE questions IS '質問管理テーブル';
 COMMENT ON COLUMN questions.question_type IS '質問タイプ（single/multiple/text/rating/image）';

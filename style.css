@@ -708,6 +708,41 @@ header h1 {
     font-size: 0.75rem;
 }
 
+/* 重複送信モード選択ラジオボタン */
+.radio-group {
+    display: flex;
+    gap: 16px;
+}
+
+.radio-label-inline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+}
+
+.radio-label-inline input[type="radio"] {
+    margin: 0;
+}
+
+/* 重複送信モードバッジ */
+.duplicate-mode-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+}
+
+.duplicate-mode-badge.overwrite {
+    background: #DBEAFE;
+    color: #1E40AF;
+}
+
+.duplicate-mode-badge.append {
+    background: #D1FAE5;
+    color: #047857;
+}
+
 .question-actions {
     display: flex;
     gap: 8px;
