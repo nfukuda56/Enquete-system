@@ -581,10 +581,30 @@ header h1 {
 }
 
 .text-response-item {
-    padding: 12px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
     background: var(--bg-color);
-    border-radius: 8px;
-    margin-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.text-response-item:last-child {
+    border-bottom: none;
+}
+
+.text-response-content {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.text-response-actions {
+    flex-shrink: 0;
+    width: 80px;
+    text-align: right;
 }
 
 .text-response-item .response-time {
@@ -621,6 +641,21 @@ header h1 {
     border-radius: 12px;
     padding: 24px;
     box-shadow: var(--shadow);
+}
+
+.questions-list-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.questions-list-header h2 {
+    margin: 0;
+    padding: 0;
+    border: none;
 }
 
 /* 質問リストアイテム */
@@ -1247,7 +1282,24 @@ header .event-name {
     margin-left: 8px;
 }
 
-/* 関連資料リンク */
+/* 関連資料リンク（インライン表示） */
+.event-material-link {
+    display: inline-block;
+    background: #FEF3C7;
+    color: #92400E;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    margin-left: 8px;
+    text-decoration: none;
+}
+
+.event-material-link:hover {
+    background: #FDE68A;
+    text-decoration: none;
+}
+
+/* 関連資料リンク（下段表示用・後方互換） */
 .event-material {
     margin-top: 8px;
 }
@@ -1560,6 +1612,13 @@ header .event-name {
     background: rgba(255,255,255,0.2);
 }
 
+/* プレゼン中状態（緑背景） */
+#sidebar-present-btn.presenting {
+    background-color: #22c55e;
+    color: white;
+    border-color: #22c55e;
+}
+
 .sidebar-spacer {
     flex-grow: 1;
 }
@@ -1619,6 +1678,24 @@ header .event-name {
     padding: 2rem;
     border-radius: 12px;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    text-align: center;
+}
+
+.qr-modal-url {
+    margin-top: 1rem;
+    font-family: monospace;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    word-break: break-all;
+    padding: 8px 12px;
+    background: var(--bg-color);
+    border-radius: 6px;
+}
+
+.qr-modal-notice {
+    margin-top: 0.75rem;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
 }
 
 /* 折り畳みセクション */

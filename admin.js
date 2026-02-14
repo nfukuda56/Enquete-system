@@ -58,8 +58,6 @@ function updateTopHeader() {
     const nameEl = document.getElementById('header-event-name');
     const dateEl = document.getElementById('header-event-date');
 
-    const clearBtn = document.getElementById('clear-responses-btn');
-
     const displayToolbar = document.getElementById('display-control-toolbar');
 
     if (selectedEventId && currentEvent) {
@@ -69,13 +67,11 @@ function updateTopHeader() {
         } else {
             dateEl.textContent = '';
         }
-        if (clearBtn) clearBtn.style.display = 'inline-block';
         if (displayToolbar) displayToolbar.style.display = 'flex';
         updateDisplayControlUI();
     } else {
-        nameEl.textContent = 'イベントを選択してください';
+        nameEl.textContent = 'イベント管理からイベントを作成、選択してください';
         dateEl.textContent = '';
-        if (clearBtn) clearBtn.style.display = 'none';
         if (displayToolbar) displayToolbar.style.display = 'none';
     }
 }
@@ -178,10 +174,9 @@ async function toggleImageDisplay() {
     renderResults();
 }
 
-// 緊急停止
+// 緊急停止（確認なし即時実行）
 async function emergencyStopDisplay() {
     if (!selectedEventId) return;
-    if (!confirm('自由記述・画像の表示を即時停止しますか？')) return;
 
     const { error } = await supabaseClient
         .from('events')
@@ -250,6 +245,7 @@ function updateSidebarQR() {
 function openQRModal(url) {
     const modal = document.getElementById('qr-modal');
     const codeContainer = document.getElementById('qr-modal-code');
+    const urlElement = document.getElementById('qr-modal-url');
     codeContainer.innerHTML = '';
     new QRCode(codeContainer, {
         text: url,
@@ -259,6 +255,9 @@ function openQRModal(url) {
         colorLight: '#ffffff',
         correctLevel: QRCode.CorrectLevel.M
     });
+    if (urlElement) {
+        urlElement.textContent = url;
+    }
     modal.classList.add('active');
 }
 
@@ -279,7 +278,17 @@ function setupEventForms() {
         e.preventDefault();
         await addEvent('event-name', 'event-date', 'event-description');
         e.target.reset();
+        closeAddEventModal();
     });
+}
+
+// 新規イベント作成モーダル
+function openAddEventModal() {
+    document.getElementById('add-event-modal').style.display = 'flex';
+}
+
+function closeAddEventModal() {
+    document.getElementById('add-event-modal').style.display = 'none';
 }
 
 // イベント読み込み
@@ -322,15 +331,16 @@ async function selectEvent(eventId) {
 
     // QRコードセクション表示/非表示（イベント管理ビュー内）
     const qrSection = document.getElementById('qr-section');
+    const addQuestionModalBtn = document.getElementById('open-add-question-modal-btn');
     if (selectedEventId) {
         qrSection.style.display = 'flex';
         generateQRCode();
         generateMaterialQRCode();
-        document.getElementById('add-question-btn').disabled = false;
+        if (addQuestionModalBtn) addQuestionModalBtn.disabled = false;
         document.getElementById('question-event-notice').style.display = 'none';
     } else {
         qrSection.style.display = 'none';
-        document.getElementById('add-question-btn').disabled = true;
+        if (addQuestionModalBtn) addQuestionModalBtn.disabled = true;
         document.getElementById('question-event-notice').style.display = 'block';
     }
 
@@ -518,15 +528,59 @@ function renderEventsList() {
                 <span class="event-name">${escapeHtml(e.name)}</span>
                 ${e.event_date ? `<span class="event-date">${e.event_date}</span>` : ''}
                 ${e.expected_participants ? `<span class="event-participants-badge">参加予定: ${e.expected_participants}名</span>` : ''}
+                ${e.material_url ? `<a class="event-material-link" href="${escapeHtml(e.material_url)}" target="_blank" rel="noopener">関連資料</a>` : ''}
                 ${e.description ? `<p class="event-description">${escapeHtml(e.description)}</p>` : ''}
-                ${e.material_url ? `<p class="event-material"><a href="${escapeHtml(e.material_url)}" target="_blank" rel="noopener">関連資料</a></p>` : ''}
             </div>
             <div class="event-actions">
+                <button class="btn btn-sm btn-warning" onclick="clearEventResponses(${e.id})">回答クリア</button>
                 <button class="btn btn-sm btn-secondary" onclick="editEvent(${e.id})">編集</button>
                 <button class="btn btn-sm btn-danger" onclick="deleteEvent(${e.id})">削除</button>
             </div>
         </div>
     `).join('');
+}
+
+// イベントごとの回答クリア
+async function clearEventResponses(eventId) {
+    if (!confirm('このイベントの回答をすべて削除しますか？\nこの操作は取り消せません。')) {
+        return;
+    }
+
+    try {
+        // まずイベントに紐づく質問IDを取得
+        const { data: eventQuestions, error: qError } = await supabaseClient
+            .from('questions')
+            .select('id')
+            .eq('event_id', eventId);
+
+        if (qError) throw qError;
+
+        if (!eventQuestions || eventQuestions.length === 0) {
+            alert('このイベントには質問がありません。');
+            return;
+        }
+
+        const questionIds = eventQuestions.map(q => q.id);
+
+        const { error } = await supabaseClient
+            .from('responses')
+            .delete()
+            .in('question_id', questionIds);
+
+        if (error) throw error;
+
+        // 選択中のイベントの場合はローカル配列も更新
+        if (eventId === selectedEventId) {
+            responses = [];
+            renderResults();
+            updateTotalCount();
+        }
+
+        alert('回答を削除しました。');
+    } catch (error) {
+        console.error('回答クリアエラー:', error);
+        alert('回答の削除に失敗しました。');
+    }
 }
 
 // ========== イベント編集 ==========
@@ -822,7 +876,7 @@ function renderResults() {
     const loading = document.getElementById('loading');
 
     if (!selectedEventId) {
-        container.innerHTML = '<p class="no-data">イベント管理でイベントを選択してください。</p>';
+        container.innerHTML = '<p class="no-data">イベント管理からイベントを作成、選択してください。</p>';
         loading.style.display = 'none';
         container.style.display = 'block';
         return;
@@ -954,12 +1008,10 @@ function generateTextResponses(questionResponses) {
         <div class="text-responses">
             ${visible.map(r => `
                 <div class="text-response-item ${r.moderation_status === 'pending' ? 'pending-moderation' : ''}">
-                    <div class="response-meta">
-                        <span class="response-time">${formatTime(r.created_at)}</span>
-                        ${r.moderation_status !== 'none' ? `<span class="moderation-badge moderation-${r.moderation_status}">${getModerationLabel(r.moderation_status)}</span>` : ''}
+                    <div class="text-response-content">${escapeHtml(r.answer)}</div>
+                    <div class="text-response-actions">
                         <button class="btn-block-response" onclick="blockResponse(${r.id})">非表示</button>
                     </div>
-                    <p>${escapeHtml(r.answer)}</p>
                 </div>
             `).join('')}
         </div>
@@ -1103,7 +1155,21 @@ function setupQuestionForm() {
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
         await addQuestion();
+        closeAddQuestionModal();
     });
+}
+
+// 新規質問追加モーダル
+function openAddQuestionModal() {
+    if (!selectedEventId) {
+        alert('先にイベントを選択してください。');
+        return;
+    }
+    document.getElementById('add-question-modal').style.display = 'flex';
+}
+
+function closeAddQuestionModal() {
+    document.getElementById('add-question-modal').style.display = 'none';
 }
 
 // 選択肢入力の表示切り替え
@@ -1202,6 +1268,9 @@ function renderQuestionsList() {
                 ${q.is_required ? '<span class="required-badge">必須</span>' : ''}
             </div>
             <div class="question-actions">
+                <button class="btn btn-sm btn-warning" onclick="clearQuestionResponses(${q.id})">
+                    回答クリア
+                </button>
                 <button class="btn btn-sm btn-secondary" onclick="editQuestion(${q.id})">
                     編集
                 </button>
@@ -1271,6 +1340,31 @@ async function deleteQuestion(id) {
     } catch (error) {
         console.error('削除エラー:', error);
         alert('削除に失敗しました。');
+    }
+}
+
+// 質問ごとの回答クリア
+async function clearQuestionResponses(questionId) {
+    if (!confirm('この質問の回答をすべて削除しますか？\nこの操作は取り消せません。')) {
+        return;
+    }
+
+    try {
+        const { error } = await supabaseClient
+            .from('responses')
+            .delete()
+            .eq('question_id', questionId);
+
+        if (error) throw error;
+
+        // ローカル配列も更新
+        responses = responses.filter(r => r.question_id !== questionId);
+        renderResults();
+        updateTotalCount();
+        alert('回答を削除しました。');
+    } catch (error) {
+        console.error('回答クリアエラー:', error);
+        alert('回答の削除に失敗しました。');
     }
 }
 
@@ -1612,11 +1706,11 @@ function updatePresentModeUI() {
     // サイドバーのプレゼンボタンも更新
     if (sidebarBtn) {
         if (isPresenting) {
-            sidebarBtn.textContent = 'プレゼン終了';
-            sidebarBtn.classList.add('active');
+            sidebarBtn.textContent = 'プレゼン中';
+            sidebarBtn.classList.add('presenting');
         } else {
-            sidebarBtn.textContent = 'プレゼン開始';
-            sidebarBtn.classList.remove('active');
+            sidebarBtn.textContent = '待機中';
+            sidebarBtn.classList.remove('presenting');
         }
     }
 }
