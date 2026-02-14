@@ -1170,7 +1170,7 @@ function renderChart(question) {
             }
         });
     } else {
-        // 円グラフ: 凡例非表示、グラフ最大化
+        // 円グラフ: 凡例非表示、データラベル表示
         charts[question.id] = new Chart(ctx, {
             type: 'doughnut',
             data: {
@@ -1183,23 +1183,31 @@ function renderChart(question) {
                     ]
                 }]
             },
+            plugins: [ChartDataLabels],
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
                 plugins: {
                     legend: {
-                        display: false  // 凡例非表示でグラフ最大化
+                        display: false
                     },
                     tooltip: {
-                        callbacks: {
-                            label: function(context) {
-                                const label = context.label || '';
-                                const value = context.raw || 0;
-                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                                return `${label}: ${value}件 (${percentage}%)`;
-                            }
-                        }
+                        enabled: false
+                    },
+                    datalabels: {
+                        color: '#fff',
+                        font: {
+                            weight: 'bold',
+                            size: 14
+                        },
+                        formatter: function(value, context) {
+                            const label = context.chart.data.labels[context.dataIndex];
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const percentage = total > 0 ? ((value / total) * 100).toFixed(0) : 0;
+                            if (value === 0) return '';
+                            return `${label}\n${percentage}%`;
+                        },
+                        textAlign: 'center'
                     }
                 }
             }
