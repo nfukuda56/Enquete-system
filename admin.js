@@ -1,10 +1,5 @@
 // 管理者用アプリケーション
 
-// アカウントページへ遷移
-function openAccountPage() {
-    window.location.href = 'auth.html';
-}
-
 let events = [];
 let questions = [];
 let responses = [];
