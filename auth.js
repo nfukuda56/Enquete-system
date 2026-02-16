@@ -3,7 +3,6 @@
 // 状態管理
 let authMode = 'register'; // 'register', 'login', 'edit'
 let verifiedEmail = null;
-let verificationCode = null;
 let currentUser = null;
 
 // 一時的な認証データ（登録完了前）
@@ -13,9 +12,33 @@ let pendingPasskey = null;
 // ========== 初期化 ==========
 
 document.addEventListener('DOMContentLoaded', async () => {
+    // URLパラメータをチェック（OAuth コールバック対応）
+    await handleAuthCallback();
+
     // 既存のセッションをチェック
     await checkExistingSession();
 });
+
+// OAuth コールバック処理
+async function handleAuthCallback() {
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = hashParams.get('access_token');
+
+    if (accessToken) {
+        // OAuth からのリダイレクト
+        try {
+            const { data: { user }, error } = await supabaseClient.auth.getUser();
+            if (user && !error) {
+                currentUser = user;
+                // URLをクリーンアップ
+                window.history.replaceState({}, document.title, window.location.pathname);
+                showLoginSuccess();
+            }
+        } catch (error) {
+            console.error('OAuth callback error:', error);
+        }
+    }
+}
 
 // 既存セッションのチェック
 async function checkExistingSession() {
@@ -105,13 +128,14 @@ function showRegistrationMode(event) {
     // 新規登録モードのUI更新
     document.getElementById('auth-title').textContent = '新規登録';
     document.getElementById('auth-description').innerHTML =
-        '新規登録キーを送付します。<br>メールに記載のキーNoを入力してください。';
+        'メールアドレスを入力して登録を開始します。';
     document.getElementById('mode-switch-text').textContent = 'アカウントをお持ちの方は';
     document.getElementById('mode-switch-link').textContent = 'ログイン';
 
     // フォームリセット
     document.getElementById('email-input').value = '';
     document.getElementById('key-input-area').style.display = 'none';
+    document.getElementById('send-key-btn').textContent = '次へ';
 
     showArea('email-verification-area');
 }
@@ -151,9 +175,9 @@ function showLoginSuccess() {
     showArea('login-success-area');
 }
 
-// ========== メール確認フロー ==========
+// ========== メール確認フロー（簡易版） ==========
 
-// 登録キー送信
+// 次へボタン（メール入力後、直接登録フォームへ）
 async function sendVerificationKey() {
     const email = document.getElementById('email-input').value.trim();
 
@@ -167,83 +191,20 @@ async function sendVerificationKey() {
         return;
     }
 
-    showLoading('登録キーを送信中...');
+    verifiedEmail = email;
 
-    try {
-        // 6桁のランダムコードを生成
-        verificationCode = generateVerificationCode();
-        verifiedEmail = email;
-
-        // Supabase Edge Functionで送信（または直接メール送信）
-        const { error } = await supabaseClient.functions.invoke('send-verification-email', {
-            body: {
-                email: email,
-                code: verificationCode,
-                mode: authMode
-            }
-        });
-
-        if (error) {
-            // Edge Functionがない場合のフォールバック
-            console.warn('Edge Function未設定。開発モードでコードをコンソールに表示:', verificationCode);
-            alert(`開発モード: 登録キーは ${verificationCode} です`);
-        }
-
-        hideLoading();
-
-        // キー入力エリアを表示
-        document.getElementById('key-input-area').style.display = 'block';
-        document.getElementById('send-key-btn').textContent = 'キーを再送信';
-
-        alert('登録キーをメールで送信しました。');
-
-    } catch (error) {
-        hideLoading();
-        console.error('送信エラー:', error);
-
-        // 開発モード: コンソールにコード表示
-        console.log('開発モード - 登録キー:', verificationCode);
-        alert(`開発モード: 登録キーは ${verificationCode} です`);
-
-        document.getElementById('key-input-area').style.display = 'block';
-    }
+    // 直接登録フォームを表示（メール確認をスキップ）
+    showRegistrationForm();
 }
 
-// キー再送信
+// キー再送信（現在は使用しない）
 async function resendVerificationKey() {
-    verificationCode = generateVerificationCode();
-
-    try {
-        await supabaseClient.functions.invoke('send-verification-email', {
-            body: {
-                email: verifiedEmail,
-                code: verificationCode,
-                mode: authMode
-            }
-        });
-    } catch (error) {
-        console.log('開発モード - 新しい登録キー:', verificationCode);
-    }
-
-    alert(`開発モード: 新しい登録キーは ${verificationCode} です`);
+    alert('この機能は現在利用できません。');
 }
 
-// キー確認
+// キー確認（現在は使用しない）
 function verifyKey() {
-    const inputKey = document.getElementById('verification-key').value.trim();
-
-    if (!inputKey) {
-        alert('登録キーを入力してください。');
-        return;
-    }
-
-    // 先頭N桁の一致チェック（計画では先頭N桁、ここでは全桁一致）
-    if (inputKey === verificationCode) {
-        // 登録フォームを表示
-        showRegistrationForm();
-    } else {
-        alert('登録キーが一致しません。');
-    }
+    showRegistrationForm();
 }
 
 // 登録フォーム表示
@@ -302,7 +263,7 @@ async function linkGoogleAccount() {
         const { data, error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: window.location.href,
+                redirectTo: window.location.origin + window.location.pathname,
                 scopes: 'email profile'
             }
         });
@@ -378,29 +339,18 @@ async function registerPasskey() {
     try {
         showLoading('パスキーを登録中...');
 
-        // パスキー登録のチャレンジを取得
-        const { data: challenge, error: challengeError } = await supabaseClient
-            .functions.invoke('passkey-register-challenge', {
-                body: { email: verifiedEmail }
-            });
-
-        if (challengeError) {
-            // 開発モード: ダミーチャレンジを使用
-            console.warn('パスキーチャレンジ取得失敗。開発モードで続行。');
-        }
-
         // WebAuthn登録
         const credential = await navigator.credentials.create({
             publicKey: {
-                challenge: challenge?.challenge || new Uint8Array(32),
+                challenge: crypto.getRandomValues(new Uint8Array(32)),
                 rp: {
                     name: 'セミナーアンケート',
                     id: window.location.hostname
                 },
                 user: {
-                    id: new TextEncoder().encode(verifiedEmail),
-                    name: verifiedEmail,
-                    displayName: verifiedEmail
+                    id: new TextEncoder().encode(verifiedEmail || currentUser?.email || 'user'),
+                    name: verifiedEmail || currentUser?.email || 'user',
+                    displayName: verifiedEmail || currentUser?.email || 'User'
                 },
                 pubKeyCredParams: [
                     { type: 'public-key', alg: -7 },  // ES256
@@ -421,7 +371,8 @@ async function registerPasskey() {
 
             pendingPasskey = {
                 credentialId: arrayBufferToBase64(credential.rawId),
-                publicKey: arrayBufferToBase64(credential.response.getPublicKey()),
+                publicKey: credential.response.getPublicKey ?
+                    arrayBufferToBase64(credential.response.getPublicKey()) : null,
                 deviceName: deviceName
             };
 
@@ -436,8 +387,10 @@ async function registerPasskey() {
 
         if (error.name === 'NotAllowedError') {
             alert('パスキーの登録がキャンセルされました。');
+        } else if (error.name === 'SecurityError') {
+            alert('セキュリティエラー: HTTPSでアクセスしてください。');
         } else {
-            alert('パスキーの登録に失敗しました。');
+            alert('パスキーの登録に失敗しました: ' + error.message);
         }
     }
 }
@@ -528,7 +481,7 @@ async function loginWithGoogle() {
         const { data, error } = await supabaseClient.auth.signInWithOAuth({
             provider: 'google',
             options: {
-                redirectTo: window.location.href
+                redirectTo: window.location.origin + window.location.pathname
             }
         });
 
@@ -550,14 +503,10 @@ async function loginWithPasskey() {
     try {
         showLoading('パスキーで認証中...');
 
-        // パスキー認証のチャレンジを取得
-        const { data: challenge, error: challengeError } = await supabaseClient
-            .functions.invoke('passkey-auth-challenge');
-
         // WebAuthn認証
         const credential = await navigator.credentials.get({
             publicKey: {
-                challenge: challenge?.challenge || new Uint8Array(32),
+                challenge: crypto.getRandomValues(new Uint8Array(32)),
                 rpId: window.location.hostname,
                 userVerification: 'required',
                 timeout: 60000
@@ -565,32 +514,10 @@ async function loginWithPasskey() {
         });
 
         if (credential) {
-            // サーバーで検証してセッション発行
-            const { data: authResult, error: authError } = await supabaseClient
-                .functions.invoke('passkey-verify', {
-                    body: {
-                        credentialId: arrayBufferToBase64(credential.rawId),
-                        authenticatorData: arrayBufferToBase64(credential.response.authenticatorData),
-                        clientDataJSON: arrayBufferToBase64(credential.response.clientDataJSON),
-                        signature: arrayBufferToBase64(credential.response.signature)
-                    }
-                });
-
-            if (authError) throw authError;
-
-            // カスタムトークンでセッション確立
-            if (authResult?.accessToken) {
-                const { data, error } = await supabaseClient.auth.setSession({
-                    access_token: authResult.accessToken,
-                    refresh_token: authResult.refreshToken
-                });
-
-                if (error) throw error;
-                currentUser = data.user;
-            }
-
+            // TODO: サーバーサイドでの検証が必要
+            // 現時点では、パスキーログインは完全には実装されていません
             hideLoading();
-            showLoginSuccess();
+            alert('パスキー認証は現在開発中です。メールアドレスとパスワード、またはGoogleでログインしてください。');
         }
 
     } catch (error) {
@@ -638,7 +565,7 @@ async function submitRegistration() {
                 email: verifiedEmail,
                 password: password,
                 options: {
-                    emailRedirectTo: window.location.origin + '/auth.html'
+                    emailRedirectTo: window.location.origin + window.location.pathname
                 }
             });
 
@@ -647,12 +574,20 @@ async function submitRegistration() {
             currentUser = data.user;
 
             // 追加の認証方法を保存
-            await saveAdditionalAuthMethods();
+            if (currentUser) {
+                await saveAdditionalAuthMethods();
+            }
 
             hideLoading();
 
-            alert('アカウントを作成しました。');
-            showLoginSuccess();
+            // メール確認が必要な場合
+            if (data.user && !data.session) {
+                alert('確認メールを送信しました。メール内のリンクをクリックして登録を完了してください。');
+                showLoginMode();
+            } else {
+                alert('アカウントを作成しました。');
+                showLoginSuccess();
+            }
 
         } else if (authMode === 'edit') {
             // パスワード変更（入力がある場合のみ）
@@ -677,8 +612,8 @@ async function submitRegistration() {
         hideLoading();
         console.error('登録エラー:', error);
 
-        if (error.message.includes('already registered')) {
-            alert('このメールアドレスは既に登録されています。');
+        if (error.message.includes('already registered') || error.message.includes('already exists')) {
+            alert('このメールアドレスは既に登録されています。ログインしてください。');
         } else {
             alert('登録に失敗しました: ' + error.message);
         }
@@ -688,32 +623,22 @@ async function submitRegistration() {
 async function saveAdditionalAuthMethods() {
     if (!currentUser) return;
 
-    // Google OAuth連携を保存
-    if (pendingGoogleAccount) {
-        await supabaseClient
-            .from('user_oauth_providers')
-            .upsert({
-                user_id: currentUser.id,
-                provider: 'google',
-                provider_user_id: pendingGoogleAccount.providerId,
-                provider_email: pendingGoogleAccount.email
-            }, {
-                onConflict: 'user_id,provider'
-            });
-    }
-
     // パスキーを保存
     if (pendingPasskey) {
-        await supabaseClient
-            .from('user_passkeys')
-            .upsert({
-                user_id: currentUser.id,
-                credential_id: pendingPasskey.credentialId,
-                public_key: pendingPasskey.publicKey,
-                device_name: pendingPasskey.deviceName
-            }, {
-                onConflict: 'user_id'
-            });
+        try {
+            await supabaseClient
+                .from('user_passkeys')
+                .upsert({
+                    user_id: currentUser.id,
+                    credential_id: pendingPasskey.credentialId,
+                    public_key: pendingPasskey.publicKey || '',
+                    device_name: pendingPasskey.deviceName
+                }, {
+                    onConflict: 'user_id'
+                });
+        } catch (error) {
+            console.error('パスキー保存エラー:', error);
+        }
     }
 }
 
@@ -743,7 +668,7 @@ async function sendPasswordResetEmail() {
 
     try {
         const { error } = await supabaseClient.auth.resetPasswordForEmail(email, {
-            redirectTo: window.location.origin + '/auth.html?mode=reset'
+            redirectTo: window.location.origin + window.location.pathname + '?mode=reset'
         });
 
         if (error) throw error;
@@ -793,7 +718,7 @@ async function loadCurrentAuthMethods() {
             .select('*')
             .eq('user_id', currentUser.id)
             .eq('provider', 'google')
-            .single();
+            .maybeSingle();
 
         if (oauth) {
             updateGoogleMethodUI(oauth.provider_email);
@@ -804,7 +729,7 @@ async function loadCurrentAuthMethods() {
             .from('user_passkeys')
             .select('*')
             .eq('user_id', currentUser.id)
-            .single();
+            .maybeSingle();
 
         if (passkey) {
             updatePasskeyMethodUI(passkey.device_name);
@@ -827,10 +752,6 @@ function resetAuthMethods() {
 function isValidEmail(email) {
     const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return re.test(email);
-}
-
-function generateVerificationCode() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
 function getDeviceName() {
