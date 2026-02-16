@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>アカウント - セミナーアンケート</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container auth-container">
+        <header>
+            <h1>セミナーアンケート</h1>
+            <p class="subtitle">アカウント管理</p>
+        </header>
+
+        <main id="auth-container">
+            <!-- ローディング -->
+            <div class="loading" id="loading" style="display: none;">
+                <div class="spinner"></div>
+                <p id="loading-text">処理中...</p>
+            </div>
+
+            <!-- ========== Step 1: メール確認画面 ========== -->
+            <div id="email-verification-area" class="auth-card">
+                <h2 id="auth-title">新規登録</h2>
+                <p class="auth-description" id="auth-description">
+                    新規登録キーを送付します。<br>
+                    メールに記載のキーNoを入力してください。
+                </p>
+
+                <form id="email-form" onsubmit="return false;">
+                    <div class="form-group">
+                        <label for="email-input">メールアドレス</label>
+                        <input type="email" id="email-input" required
+                               placeholder="example@mail.com"
+                               autocomplete="email">
+                    </div>
+
+                    <button type="button" class="btn btn-primary btn-full"
+                            id="send-key-btn" onclick="sendVerificationKey()">
+                        メール送信
+                    </button>
+                </form>
+
+                <!-- 登録キー入力（メール送信後に表示） -->
+                <div id="key-input-area" class="key-input-area" style="display: none;">
+                    <div class="form-group">
+                        <label for="verification-key">登録キー</label>
+                        <input type="text" id="verification-key" required
+                               placeholder="メールに届いた6桁のキーを入力"
+                               maxlength="6" pattern="[0-9]{6}"
+                               inputmode="numeric"
+                               autocomplete="one-time-code">
+                    </div>
+                    <button type="button" class="btn btn-primary btn-full"
+                            id="verify-key-btn" onclick="verifyKey()">
+                        確認して次へ
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-full"
+                            onclick="resendVerificationKey()">
+                        キーを再送信
+                    </button>
+                </div>
+
+                <!-- モード切り替えリンク -->
+                <div class="auth-mode-switch">
+                    <span id="mode-switch-text">アカウントをお持ちの方は</span>
+                    <a href="#" onclick="toggleAuthMode(event)">
+                        <span id="mode-switch-link">ログイン</span>
+                    </a>
+                </div>
+            </div>
+
+            <!-- ========== Step 2: 登録フォーム / 編集フォーム ========== -->
+            <div id="registration-area" class="auth-card" style="display: none;">
+                <h2 id="form-title">アカウント登録</h2>
+
+                <div class="verified-email">
+                    <span class="verified-label">メールアドレス:</span>
+                    <span class="verified-email-address" id="verified-email"></span>
+                    <span class="verified-badge">確認済</span>
+                </div>
+
+                <form id="registration-form" onsubmit="return false;">
+                    <!-- パスワード設定 -->
+                    <div id="password-section">
+                        <div class="form-group">
+                            <label for="password-input">パスワード</label>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="password-input" required
+                                       placeholder="8文字以上"
+                                       minlength="8"
+                                       autocomplete="new-password">
+                                <button type="button" class="btn-toggle-password"
+                                        onclick="togglePasswordVisibility('password-input', this)">
+                                    表示
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="password-confirm">パスワード確認</label>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="password-confirm" required
+                                       placeholder="もう一度入力"
+                                       minlength="8"
+                                       autocomplete="new-password">
+                                <button type="button" class="btn-toggle-password"
+                                        onclick="togglePasswordVisibility('password-confirm', this)">
+                                    表示
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 編集モード: パスワード変更ボタン -->
+                    <div id="password-change-section" style="display: none;">
+                        <div class="form-group">
+                            <label>パスワード</label>
+                            <button type="button" class="btn btn-secondary btn-full"
+                                    onclick="showPasswordChangeForm()">
+                                パスワードを変更する
+                            </button>
+                        </div>
+                    </div>
+
+                    <hr class="auth-divider">
+
+                    <!-- ログイン方法セクション -->
+                    <div class="login-methods-section">
+                        <h3>ログイン方法（登録後も追加・変更可能）</h3>
+
+                        <!-- メール＋パスワード（必須） -->
+                        <div class="login-method-item required">
+                            <div class="login-method-icon">✓</div>
+                            <div class="login-method-info">
+                                <div class="login-method-name">メールアドレス＋パスワード</div>
+                                <div class="login-method-status">必須</div>
+                            </div>
+                        </div>
+
+                        <!-- Googleアカウント -->
+                        <div class="login-method-item" id="google-method">
+                            <div class="login-method-icon google-icon">G</div>
+                            <div class="login-method-info">
+                                <div class="login-method-name">Googleアカウント</div>
+                                <div class="login-method-status" id="google-status">未連携</div>
+                            </div>
+                            <div class="login-method-actions" id="google-actions">
+                                <button type="button" class="btn btn-sm btn-secondary"
+                                        onclick="linkGoogleAccount()" id="google-add-btn">
+                                    + 追加
+                                </button>
+                            </div>
+                            <!-- 連携済み表示（初期非表示） -->
+                            <div class="login-method-connected" id="google-connected" style="display: none;">
+                                <span class="connected-account" id="google-account"></span>
+                                <button type="button" class="btn btn-sm btn-danger"
+                                        onclick="unlinkGoogleAccount()">
+                                    削除
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- パスキー -->
+                        <div class="login-method-item" id="passkey-method">
+                            <div class="login-method-icon passkey-icon">🔐</div>
+                            <div class="login-method-info">
+                                <div class="login-method-name">パスキー（生体認証）</div>
+                                <div class="login-method-status" id="passkey-status">未登録</div>
+                            </div>
+                            <div class="login-method-actions" id="passkey-actions">
+                                <button type="button" class="btn btn-sm btn-secondary"
+                                        onclick="registerPasskey()" id="passkey-add-btn">
+                                    + 追加
+                                </button>
+                            </div>
+                            <!-- 登録済み表示（初期非表示） -->
+                            <div class="login-method-connected" id="passkey-connected" style="display: none;">
+                                <span class="connected-account" id="passkey-device"></span>
+                                <button type="button" class="btn btn-sm btn-danger"
+                                        onclick="removePasskey()">
+                                    削除
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- フォームアクション -->
+                    <div class="form-actions-row">
+                        <button type="button" class="btn btn-secondary"
+                                onclick="cancelRegistration()">
+                            キャンセル
+                        </button>
+                        <button type="button" class="btn btn-primary"
+                                id="submit-btn" onclick="submitRegistration()">
+                            登録
+                        </button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- ========== ログイン画面 ========== -->
+            <div id="login-area" class="auth-card" style="display: none;">
+                <h2>ログイン</h2>
+
+                <form id="login-form" onsubmit="return false;">
+                    <div class="form-group">
+                        <label for="login-email">メールアドレス</label>
+                        <input type="email" id="login-email" required
+                               placeholder="example@mail.com"
+                               autocomplete="email">
+                    </div>
+                    <div class="form-group">
+                        <label for="login-password">パスワード</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="login-password" required
+                                   placeholder="パスワード"
+                                   autocomplete="current-password">
+                            <button type="button" class="btn-toggle-password"
+                                    onclick="togglePasswordVisibility('login-password', this)">
+                                表示
+                            </button>
+                        </div>
+                    </div>
+
+                    <button type="button" class="btn btn-primary btn-full"
+                            onclick="loginWithPassword()">
+                        ログイン
+                    </button>
+                </form>
+
+                <div class="login-divider">
+                    <span>または</span>
+                </div>
+
+                <!-- ソーシャルログイン -->
+                <div class="social-login-buttons">
+                    <button type="button" class="btn btn-social btn-google"
+                            onclick="loginWithGoogle()">
+                        <span class="social-icon">G</span>
+                        Googleでログイン
+                    </button>
+                    <button type="button" class="btn btn-social btn-passkey"
+                            onclick="loginWithPasskey()">
+                        <span class="social-icon">🔐</span>
+                        パスキーでログイン
+                    </button>
+                </div>
+
+                <!-- モード切り替えリンク -->
+                <div class="auth-mode-switch">
+                    <span>アカウントをお持ちでない方は</span>
+                    <a href="#" onclick="showRegistrationMode(event)">新規登録</a>
+                </div>
+
+                <div class="auth-mode-switch">
+                    <a href="#" onclick="showPasswordReset(event)">パスワードを忘れた場合</a>
+                </div>
+            </div>
+
+            <!-- ========== ログイン完了画面 ========== -->
+            <div id="login-success-area" class="auth-card" style="display: none;">
+                <div class="success-icon">✓</div>
+                <h2>ログインしました</h2>
+                <p class="auth-description">
+                    <span id="logged-in-email"></span> としてログイン中です。
+                </p>
+                <div class="logged-in-actions">
+                    <button type="button" class="btn btn-primary"
+                            onclick="goToAdmin()">
+                        管理画面へ
+                    </button>
+                    <button type="button" class="btn btn-secondary"
+                            onclick="showAuthEdit()">
+                        認証方法を編集
+                    </button>
+                    <button type="button" class="btn btn-danger"
+                            onclick="logout()">
+                        ログアウト
+                    </button>
+                </div>
+            </div>
+
+            <!-- ========== パスワードリセット画面 ========== -->
+            <div id="password-reset-area" class="auth-card" style="display: none;">
+                <h2>パスワードリセット</h2>
+                <p class="auth-description">
+                    登録済みのメールアドレスにリセット用のリンクを送信します。
+                </p>
+
+                <form id="reset-form" onsubmit="return false;">
+                    <div class="form-group">
+                        <label for="reset-email">メールアドレス</label>
+                        <input type="email" id="reset-email" required
+                               placeholder="example@mail.com"
+                               autocomplete="email">
+                    </div>
+
+                    <button type="button" class="btn btn-primary btn-full"
+                            onclick="sendPasswordResetEmail()">
+                        リセットメールを送信
+                    </button>
+                </form>
+
+                <div class="auth-mode-switch">
+                    <a href="#" onclick="showLoginMode(event)">ログインに戻る</a>
+                </div>
+            </div>
+
+            <!-- ========== エラー表示 ========== -->
+            <div id="error-area" class="auth-card error-card" style="display: none;">
+                <h2>エラー</h2>
+                <p id="error-message"></p>
+                <button type="button" class="btn btn-secondary"
+                        onclick="hideError()">
+                    戻る
+                </button>
+            </div>
+        </main>
+
+        <footer>
+            <p>&copy; 2024 セミナーアンケートシステム</p>
+        </footer>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="config.js"></script>
+    <script src="auth.js"></script>
+</body>
+</html>

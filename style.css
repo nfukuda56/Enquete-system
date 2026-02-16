@@ -2081,3 +2081,359 @@ header .event-name {
     color: #92400E;
     text-align: center;
 }
+
+/* ========== 認証画面 ========== */
+
+.auth-container {
+    max-width: 480px;
+    padding-top: 40px;
+}
+
+.auth-card {
+    background: var(--card-bg);
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: var(--shadow-lg);
+}
+
+.auth-card h2 {
+    font-size: 1.5rem;
+    margin-bottom: 8px;
+    color: var(--text-color);
+    text-align: center;
+}
+
+.auth-description {
+    text-align: center;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    line-height: 1.6;
+}
+
+/* フルワイズボタン */
+.btn-full {
+    width: 100%;
+    margin-top: 8px;
+}
+
+/* パスワード入力ラッパー */
+.password-input-wrapper {
+    display: flex;
+    gap: 8px;
+}
+
+.password-input-wrapper input {
+    flex: 1;
+}
+
+.btn-toggle-password {
+    padding: 8px 12px;
+    background: var(--bg-color);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.btn-toggle-password:hover {
+    background: var(--border-color);
+}
+
+/* 登録キー入力エリア */
+.key-input-area {
+    margin-top: 20px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border-color);
+}
+
+/* モード切り替えリンク */
+.auth-mode-switch {
+    text-align: center;
+    margin-top: 20px;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+}
+
+.auth-mode-switch a {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.auth-mode-switch a:hover {
+    text-decoration: underline;
+}
+
+/* 区切り線 */
+.auth-divider {
+    border: none;
+    border-top: 1px solid var(--border-color);
+    margin: 24px 0;
+}
+
+/* 確認済みメール表示 */
+.verified-email {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px;
+    background: #D1FAE5;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+}
+
+.verified-label {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.verified-email-address {
+    font-weight: 600;
+    color: var(--text-color);
+}
+
+.verified-badge {
+    background: var(--success-color);
+    color: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+/* ログイン方法セクション */
+.login-methods-section {
+    margin: 20px 0;
+}
+
+.login-methods-section h3 {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    font-weight: 500;
+}
+
+.login-method-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 16px;
+    background: var(--bg-color);
+    border-radius: 10px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+}
+
+.login-method-item.required {
+    background: #EEF2FF;
+    border: 1px solid #C7D2FE;
+}
+
+.login-method-icon {
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--primary-color);
+    color: white;
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 1.2rem;
+}
+
+.login-method-icon.google-icon {
+    background: #4285F4;
+}
+
+.login-method-icon.passkey-icon {
+    background: #10B981;
+    font-size: 1.4rem;
+}
+
+.login-method-info {
+    flex: 1;
+    min-width: 120px;
+}
+
+.login-method-name {
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 2px;
+}
+
+.login-method-status {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.login-method-status.connected {
+    color: var(--success-color);
+    font-weight: 500;
+}
+
+.login-method-actions {
+    flex-shrink: 0;
+}
+
+.login-method-connected {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.connected-account {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    background: white;
+    padding: 4px 10px;
+    border-radius: 4px;
+}
+
+/* フォームアクション行 */
+.form-actions-row {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.form-actions-row .btn {
+    flex: 1;
+}
+
+/* ログイン画面の区切り線 */
+.login-divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    margin: 24px 0;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+}
+
+.login-divider::before,
+.login-divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.login-divider span {
+    padding: 0 16px;
+}
+
+/* ソーシャルログインボタン */
+.social-login-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.btn-social {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 12px 20px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-social:hover {
+    background: var(--bg-color);
+    border-color: var(--text-secondary);
+}
+
+.btn-google {
+    border-color: #4285F4;
+    color: #4285F4;
+}
+
+.btn-google:hover {
+    background: #EEF4FF;
+}
+
+.btn-passkey {
+    border-color: #10B981;
+    color: #10B981;
+}
+
+.btn-passkey:hover {
+    background: #ECFDF5;
+}
+
+.social-icon {
+    font-size: 1.2rem;
+    font-weight: bold;
+}
+
+/* ログイン成功画面 */
+.success-icon {
+    width: 80px;
+    height: 80px;
+    margin: 0 auto 20px;
+    background: var(--success-color);
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2.5rem;
+}
+
+.logged-in-actions {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 24px;
+}
+
+/* エラーカード */
+.error-card {
+    text-align: center;
+    background: #FEF2F2;
+    border: 1px solid #FECACA;
+}
+
+.error-card h2 {
+    color: var(--danger-color);
+}
+
+/* レスポンシブ対応 */
+@media (max-width: 480px) {
+    .auth-container {
+        padding: 20px 15px;
+    }
+
+    .auth-card {
+        padding: 24px 20px;
+    }
+
+    .login-method-item {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .login-method-actions,
+    .login-method-connected {
+        width: 100%;
+        margin-top: 10px;
+    }
+
+    .login-method-connected {
+        justify-content: space-between;
+    }
+
+    .form-actions-row {
+        flex-direction: column;
+    }
+}
