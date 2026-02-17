@@ -31,12 +31,44 @@ async function handleAuthCallback() {
             const { data: { user }, error } = await supabaseClient.auth.getUser();
             if (user && !error) {
                 currentUser = user;
+
+                // Google OAuth連携情報をDBに保存
+                await saveOAuthProviderInfo(user);
+
                 // URLをクリーンアップ
                 window.history.replaceState({}, document.title, window.location.pathname);
                 showLoginSuccess();
             }
         } catch (error) {
             console.error('OAuth callback error:', error);
+        }
+    }
+}
+
+// OAuth プロバイダー情報をDBに保存
+async function saveOAuthProviderInfo(user) {
+    if (!user || !user.identities) return;
+
+    for (const identity of user.identities) {
+        if (identity.provider === 'google') {
+            try {
+                const { error } = await supabaseClient
+                    .from('user_oauth_providers')
+                    .upsert({
+                        user_id: user.id,
+                        provider: 'google',
+                        provider_user_id: identity.id,
+                        provider_email: identity.identity_data?.email || user.email
+                    }, {
+                        onConflict: 'user_id,provider'
+                    });
+
+                if (error) {
+                    console.error('OAuth provider save error:', error);
+                }
+            } catch (err) {
+                console.error('OAuth provider save error:', err);
+            }
         }
     }
 }
@@ -768,6 +800,7 @@ async function loadCurrentAuthMethods() {
     if (!currentUser) return;
 
     try {
+        // まずDBから確認
         const { data: oauth } = await supabaseClient
             .from('user_oauth_providers')
             .select('*')
@@ -777,6 +810,15 @@ async function loadCurrentAuthMethods() {
 
         if (oauth) {
             updateGoogleMethodUI(oauth.provider_email);
+        } else {
+            // DBになければ、user.identitiesから確認
+            const googleIdentity = currentUser.identities?.find(i => i.provider === 'google');
+            if (googleIdentity) {
+                const email = googleIdentity.identity_data?.email || currentUser.email;
+                updateGoogleMethodUI(email);
+                // DBにも保存
+                await saveOAuthProviderInfo(currentUser);
+            }
         }
 
         const { data: passkey } = await supabaseClient
