@@ -24,7 +24,8 @@
             <div id="email-verification-area" class="auth-card">
                 <h2 id="auth-title">新規登録</h2>
                 <p class="auth-description" id="auth-description">
-                    メールアドレスを入力して登録を開始します。
+                    新規登録キーを送付します。<br>
+                    メールに記載のキーNoを入力してください。
                 </p>
 
                 <form id="email-form" onsubmit="return false;">
@@ -37,12 +38,29 @@
 
                     <button type="button" class="btn btn-primary btn-full"
                             id="send-key-btn" onclick="sendVerificationKey()">
-                        次へ
+                        メール送信
                     </button>
                 </form>
 
-                <!-- 登録キー入力（将来のメール確認用、現在は非表示） -->
-                <div id="key-input-area" class="key-input-area" style="display: none;"></div>
+                <!-- 登録キー入力（メール送信後に表示） -->
+                <div id="key-input-area" class="key-input-area" style="display: none;">
+                    <div class="form-group">
+                        <label for="verification-key">登録キー</label>
+                        <input type="text" id="verification-key" required
+                               placeholder="メールに届いた6桁のキーを入力"
+                               maxlength="6" pattern="[0-9]{6}"
+                               inputmode="numeric"
+                               autocomplete="one-time-code">
+                    </div>
+                    <button type="button" class="btn btn-primary btn-full"
+                            id="verify-key-btn" onclick="verifyKey()">
+                        確認して次へ
+                    </button>
+                    <button type="button" class="btn btn-secondary btn-full"
+                            onclick="resendVerificationKey()">
+                        キーを再送信
+                    </button>
+                </div>
 
                 <!-- モード切り替えリンク -->
                 <div class="auth-mode-switch">
