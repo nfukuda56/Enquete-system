@@ -1665,6 +1665,18 @@ header .event-name {
     padding: 0.5rem 0;
 }
 
+.sidebar-user-info {
+    padding: 0.5rem 1rem;
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.7);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    word-break: break-all;
+}
+
+.logout-btn {
+    color: #ef4444 !important;
+}
+
 .sidebar-nav-btn {
     background: transparent;
     border: 1px solid rgba(255,255,255,0.3);

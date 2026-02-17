@@ -1,5 +1,40 @@
 // 管理者用アプリケーション
 
+// 現在のユーザー情報
+let currentUser = null;
+
+// 認証チェック関数
+async function checkAuth() {
+    const { data: { session }, error } = await supabaseClient.auth.getSession();
+
+    if (!session || !session.user) {
+        window.location.href = 'auth.html';
+        return false;
+    }
+
+    currentUser = session.user;
+    return true;
+}
+
+// ユーザー情報表示
+function updateUserInfo() {
+    const userInfoEl = document.getElementById('user-info');
+    if (userInfoEl && currentUser) {
+        userInfoEl.textContent = currentUser.email;
+    }
+}
+
+// ログアウト関数
+async function logout() {
+    const { error } = await supabaseClient.auth.signOut();
+    if (error) {
+        alert('ログアウトに失敗しました');
+        return;
+    }
+    currentUser = null;
+    window.location.href = 'auth.html';
+}
+
 // アカウントページへ遷移
 function openAccountPage() {
     window.location.href = 'auth.html';
@@ -20,6 +55,14 @@ const BASE_URL = 'https://nfukuda56.github.io/Enquete-system/';
 
 // 初期化
 document.addEventListener('DOMContentLoaded', async () => {
+    // 認証チェック（未ログインならリダイレクト）
+    const isAuthenticated = await checkAuth();
+    if (!isAuthenticated) return;
+
+    // ユーザー情報をUIに反映
+    updateUserInfo();
+
+    // 既存の初期化処理
     setupViewNavigation();
     setupEventForms();
     setupQuestionForm();

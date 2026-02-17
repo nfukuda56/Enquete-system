@@ -31,9 +31,13 @@
             <div class="sidebar-qr" id="sidebar-qr"></div>
             <div class="sidebar-spacer"></div>
             <nav class="sidebar-nav-bottom">
+                <div class="sidebar-user-info">
+                    <span class="user-email" id="user-info"></span>
+                </div>
                 <button class="sidebar-nav-btn" data-view="questions">質問管理</button>
                 <button class="sidebar-nav-btn" data-view="events">イベント管理</button>
-                <button class="sidebar-nav-btn" onclick="openAccountPage()">アカウント</button>
+                <button class="sidebar-nav-btn" onclick="openAccountPage()">アカウント設定</button>
+                <button class="sidebar-nav-btn logout-btn" onclick="logout()">ログアウト</button>
             </nav>
         </aside>
 
