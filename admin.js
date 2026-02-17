@@ -815,7 +815,6 @@ async function loadResponses() {
         if (error) throw error;
 
         responses = data || [];
-        console.log('[loadResponses] DBから取得した回答数:', responses.length, '回答IDs:', responses.map(r => r.id));
         renderResults();
         updateTotalCount();
     } catch (error) {
