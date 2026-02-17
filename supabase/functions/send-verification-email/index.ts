@@ -33,7 +33,7 @@ Deno.serve(async (req) => {
     const subject = isRegister ? "登録確認コード" : "認証確認コード"
 
     const htmlContent = "<div style='font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px'>" +
-      "<h1 style='color:#4F46E5;text-align:center'>セミナーアンケート</h1>" +
+      "<h1 style='color:#4F46E5;text-align:center'>伝心くん</h1>" +
       "<p>" + (isRegister ? "アカウント登録" : "認証情報の変更") + "のための確認コードです。</p>" +
       "<div style='background:#F3F4F6;border-radius:8px;padding:20px;text-align:center;margin:20px 0'>" +
       "<span style='font-size:32px;font-weight:bold;letter-spacing:8px;color:#4F46E5'>" + code + "</span>" +

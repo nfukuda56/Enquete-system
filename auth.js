@@ -446,7 +446,7 @@ async function registerPasskey() {
             publicKey: {
                 challenge: crypto.getRandomValues(new Uint8Array(32)),
                 rp: {
-                    name: 'セミナーアンケート',
+                    name: '伝心くん',
                     id: window.location.hostname
                 },
                 user: {
