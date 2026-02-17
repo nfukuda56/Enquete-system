@@ -15,30 +15,34 @@ async function checkAuth() {
 
     currentUser = session.user;
 
-    // ユーザープロファイルを取得
-    const { data: profile, error: profileError } = await supabaseClient
-        .from('user_profiles')
-        .select('*')
-        .eq('user_id', currentUser.id)
-        .single();
-
-    if (profileError || !profile) {
-        // プロファイルがない場合は作成
-        const { data: newProfile, error: insertError } = await supabaseClient
+    // ユーザープロファイルを取得（エラー時はスキップして続行）
+    try {
+        const { data: profile, error: profileError } = await supabaseClient
             .from('user_profiles')
-            .insert([{ user_id: currentUser.id, role: 'event_admin' }])
-            .select()
+            .select('*')
+            .eq('user_id', currentUser.id)
             .single();
 
-        if (insertError) {
-            console.error('プロファイル作成エラー:', insertError);
-            // エラーでも続行（プロファイルなしでevent_adminとして扱う）
-            userProfile = { role: 'event_admin' };
+        if (profileError || !profile) {
+            // プロファイルがない場合は作成を試みる
+            const { data: newProfile, error: insertError } = await supabaseClient
+                .from('user_profiles')
+                .insert([{ user_id: currentUser.id, role: 'event_admin' }])
+                .select()
+                .single();
+
+            if (insertError) {
+                console.warn('プロファイル作成スキップ:', insertError.message);
+                userProfile = { role: 'event_admin' };
+            } else {
+                userProfile = newProfile;
+            }
         } else {
-            userProfile = newProfile;
+            userProfile = profile;
         }
-    } else {
-        userProfile = profile;
+    } catch (e) {
+        console.warn('プロファイル取得スキップ:', e.message);
+        userProfile = { role: 'event_admin' };
     }
 
     return true;
@@ -811,6 +815,7 @@ async function loadResponses() {
         if (error) throw error;
 
         responses = data || [];
+        console.log('[loadResponses] DBから取得した回答数:', responses.length, '回答IDs:', responses.map(r => r.id));
         renderResults();
         updateTotalCount();
     } catch (error) {
@@ -859,7 +864,14 @@ function startRealtimeSubscription() {
                 // 選択中イベントの質問への回答のみ処理
                 const questionIds = questions.map(q => q.id);
                 if (questionIds.includes(payload.new.question_id)) {
-                    responses.push(payload.new);
+                    // 重複チェック: 同じIDの回答が既に存在しないか確認
+                    const existingIdx = responses.findIndex(r => r.id === payload.new.id);
+                    if (existingIdx < 0) {
+                        responses.push(payload.new);
+                    } else {
+                        // 既に存在する場合は更新
+                        responses[existingIdx] = payload.new;
+                    }
                     renderResults();
                     updateTotalCount();
                     highlightNewResponse();
@@ -874,6 +886,18 @@ function startRealtimeSubscription() {
                 if (idx >= 0) {
                     responses[idx] = payload.new;
                     renderResults();
+                }
+            }
+        )
+        .on('postgres_changes',
+            { event: 'DELETE', schema: 'public', table: 'responses' },
+            (payload) => {
+                // 削除された回答をローカル配列から除去
+                const idx = responses.findIndex(r => r.id === payload.old.id);
+                if (idx >= 0) {
+                    responses.splice(idx, 1);
+                    renderResults();
+                    updateTotalCount();
                 }
             }
         )
