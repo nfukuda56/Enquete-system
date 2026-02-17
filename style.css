@@ -1671,6 +1671,28 @@ header .event-name {
     color: rgba(255,255,255,0.7);
     border-bottom: 1px solid rgba(255,255,255,0.1);
     word-break: break-all;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+/* ロールバッジ */
+.role-badge {
+    display: inline-block;
+    padding: 2px 6px;
+    font-size: 0.65rem;
+    border-radius: 4px;
+    text-align: center;
+}
+
+.role-badge.system-owner {
+    background: #fbbf24;
+    color: #78350f;
+}
+
+.role-badge.event-admin {
+    background: #60a5fa;
+    color: #1e3a8a;
 }
 
 .logout-btn {
@@ -1891,6 +1913,18 @@ header .event-name {
     background: var(--bg-color);
     border-radius: 8px;
     border: 1px dashed var(--border-color);
+}
+
+/* モデレーション統計表示 */
+.moderation-stats {
+    text-align: center;
+    padding: 12px 16px;
+    margin-top: 12px;
+    background: #FEF3C7;
+    border: 1px solid #FCD34D;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: #92400E;
 }
 
 /* モデレーションバッジ */

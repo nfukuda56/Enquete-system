@@ -2,6 +2,7 @@
 
 // 現在のユーザー情報
 let currentUser = null;
+let userProfile = null;
 
 // 認証チェック関数
 async function checkAuth() {
@@ -13,7 +14,47 @@ async function checkAuth() {
     }
 
     currentUser = session.user;
+
+    // ユーザープロファイルを取得
+    const { data: profile, error: profileError } = await supabaseClient
+        .from('user_profiles')
+        .select('*')
+        .eq('user_id', currentUser.id)
+        .single();
+
+    if (profileError || !profile) {
+        // プロファイルがない場合は作成
+        const { data: newProfile, error: insertError } = await supabaseClient
+            .from('user_profiles')
+            .insert([{ user_id: currentUser.id, role: 'event_admin' }])
+            .select()
+            .single();
+
+        if (insertError) {
+            console.error('プロファイル作成エラー:', insertError);
+            // エラーでも続行（プロファイルなしでevent_adminとして扱う）
+            userProfile = { role: 'event_admin' };
+        } else {
+            userProfile = newProfile;
+        }
+    } else {
+        userProfile = profile;
+    }
+
     return true;
+}
+
+// システムオーナー判定
+function isSystemOwner() {
+    return userProfile?.role === 'system_owner';
+}
+
+// ロール表示名取得
+function getRoleDisplayName() {
+    if (userProfile?.role === 'system_owner') {
+        return 'システムオーナー';
+    }
+    return 'イベント管理者';
 }
 
 // ユーザー情報表示
@@ -21,6 +62,14 @@ function updateUserInfo() {
     const userInfoEl = document.getElementById('user-info');
     if (userInfoEl && currentUser) {
         userInfoEl.textContent = currentUser.email;
+    }
+
+    // ロールバッジを更新
+    const roleBadgeEl = document.getElementById('role-badge');
+    if (roleBadgeEl && userProfile) {
+        roleBadgeEl.textContent = getRoleDisplayName();
+        roleBadgeEl.className = 'role-badge ' +
+            (userProfile.role === 'system_owner' ? 'system-owner' : 'event-admin');
     }
 }
 
@@ -506,7 +555,8 @@ async function addEvent(nameId, dateId, descId) {
                 event_date: date,
                 description,
                 expected_participants: participants ? parseInt(participants) : null,
-                material_url: materialUrl
+                material_url: materialUrl,
+                owner_id: currentUser.id  // イベント所有者を設定
             }])
             .select()
             .single();
@@ -1056,18 +1106,47 @@ function generateResultCard(question, questionResponses, index, totalQuestions, 
     `;
 }
 
+// モデレーション統計を計算
+function calculateModerationStats(questionResponses) {
+    const blocked = questionResponses.filter(r => r.moderation_status === 'blocked').length;
+
+    // 全回答のmoderation_categoriesから最高スコアを取得
+    let maxScore = 0;
+    questionResponses.forEach(r => {
+        if (r.moderation_categories && typeof r.moderation_categories === 'object') {
+            Object.values(r.moderation_categories).forEach(score => {
+                if (typeof score === 'number' && score > maxScore) {
+                    maxScore = score;
+                }
+            });
+        }
+    });
+
+    return { blocked, maxScore };
+}
+
+// モデレーション統計HTMLを生成
+function generateModerationStatsHtml(questionResponses) {
+    const stats = calculateModerationStats(questionResponses);
+    const scoreDisplay = stats.maxScore > 0 ? stats.maxScore.toFixed(2) : '-';
+    return `<div class="moderation-stats">🚫 ブロック: ${stats.blocked}件 | 最高スコア: ${scoreDisplay}</div>`;
+}
+
 // テキスト回答一覧
 function generateTextResponses(questionResponses) {
+    const statsHtml = generateModerationStatsHtml(questionResponses);
+
     if (!currentEvent?.text_display_enabled) {
-        return '<p class="display-off-notice">自由記述の表示がOFFです（ヘッダーのトグルで切り替え）</p>';
+        return `<p class="display-off-notice">自由記述の表示がOFFです（ヘッダーのトグルで切り替え）</p>${statsHtml}`;
     }
 
     const visible = questionResponses.filter(r => r.moderation_status !== 'blocked');
     if (visible.length === 0) {
-        return '<p class="no-responses">まだ回答がありません</p>';
+        return `<p class="no-responses">まだ回答がありません</p>${statsHtml}`;
     }
 
     return `
+        ${statsHtml}
         <div class="text-responses">
             ${visible.map(r => `
                 <div class="text-response-item ${r.moderation_status === 'pending' ? 'pending-moderation' : ''}">
@@ -1083,16 +1162,19 @@ function generateTextResponses(questionResponses) {
 
 // 画像ギャラリー表示
 function generateImageGallery(questionResponses) {
+    const statsHtml = generateModerationStatsHtml(questionResponses);
+
     if (!currentEvent?.image_display_enabled) {
-        return '<p class="display-off-notice">画像投稿の表示がOFFです（ヘッダーのトグルで切り替え）</p>';
+        return `<p class="display-off-notice">画像投稿の表示がOFFです（ヘッダーのトグルで切り替え）</p>${statsHtml}`;
     }
 
     const visible = questionResponses.filter(r => r.moderation_status !== 'blocked');
     if (visible.length === 0) {
-        return '<p class="no-responses">まだ回答がありません</p>';
+        return `<p class="no-responses">まだ回答がありません</p>${statsHtml}`;
     }
 
     return `
+        ${statsHtml}
         <div class="image-gallery">
             ${visible.map(r => `
                 <div class="image-tile">
