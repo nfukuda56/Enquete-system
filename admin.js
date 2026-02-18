@@ -1892,11 +1892,14 @@ async function loadAdminState() {
             .from('admin_state')
             .select('*')
             .eq('event_id', selectedEventId)
-            .single();
+            .maybeSingle();
 
-        if (error && error.code !== 'PGRST116') {
-            // PGRST116 = not found (初回アクセス時)
-            throw error;
+        if (error) {
+            console.warn('admin_state読み込みエラー:', error);
+            // エラーでもデフォルト状態で続行
+            isPresenting = false;
+            updatePresentModeUI();
+            return;
         }
 
         if (data) {
