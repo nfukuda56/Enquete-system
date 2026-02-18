@@ -61,6 +61,18 @@ function getRoleDisplayName() {
     return 'イベント管理者';
 }
 
+// イベント編集権限チェック
+function canEditEvent(event) {
+    if (!event || !currentUser) return false;
+    if (isSystemOwner()) return true;
+    return event.owner_id === currentUser.id;
+}
+
+// イベント削除権限チェック
+function canDeleteEvent(event) {
+    return canEditEvent(event);
+}
+
 // ユーザー情報表示
 function updateUserInfo() {
     const userInfoEl = document.getElementById('user-info');
@@ -395,10 +407,17 @@ function closeAddEventModal() {
 // イベント読み込み
 async function loadEvents() {
     try {
-        const { data, error } = await supabaseClient
+        let query = supabaseClient
             .from('events')
             .select('*')
             .order('created_at', { ascending: false });
+
+        // システムオーナー以外は自分が作成したイベントのみ表示
+        if (!isSystemOwner() && currentUser) {
+            query = query.eq('owner_id', currentUser.id);
+        }
+
+        const { data, error } = await query;
 
         if (error) throw error;
 
@@ -587,6 +606,13 @@ async function addEvent(nameId, dateId, descId) {
 
 // イベント削除
 async function deleteEvent(id) {
+    // 権限チェック
+    const event = events.find(e => e.id === id);
+    if (!canDeleteEvent(event)) {
+        alert('このイベントを削除する権限がありません。');
+        return;
+    }
+
     if (!confirm('このイベントを削除しますか？関連する質問と回答もすべて削除されます。')) return;
 
     try {
@@ -624,7 +650,11 @@ function renderEventsList() {
         return;
     }
 
-    container.innerHTML = events.map(e => `
+    container.innerHTML = events.map(e => {
+        const canEdit = canEditEvent(e);
+        const canDelete = canDeleteEvent(e);
+
+        return `
         <div class="event-list-item">
             <div class="event-info">
                 <span class="event-name">${escapeHtml(e.name)}</span>
@@ -634,16 +664,23 @@ function renderEventsList() {
                 ${e.description ? `<p class="event-description">${escapeHtml(e.description)}</p>` : ''}
             </div>
             <div class="event-actions">
-                <button class="btn btn-sm btn-warning" onclick="clearEventResponses(${e.id})">回答クリア</button>
-                <button class="btn btn-sm btn-secondary" onclick="editEvent(${e.id})">編集</button>
-                <button class="btn btn-sm btn-danger" onclick="deleteEvent(${e.id})">削除</button>
+                ${canEdit ? `<button class="btn btn-sm btn-warning" onclick="clearEventResponses(${e.id})">回答クリア</button>` : ''}
+                ${canEdit ? `<button class="btn btn-sm btn-secondary" onclick="editEvent(${e.id})">編集</button>` : ''}
+                ${canDelete ? `<button class="btn btn-sm btn-danger" onclick="deleteEvent(${e.id})">削除</button>` : ''}
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 // イベントごとの回答クリア
 async function clearEventResponses(eventId) {
+    // 権限チェック
+    const event = events.find(e => e.id === eventId);
+    if (!canEditEvent(event)) {
+        alert('このイベントの回答をクリアする権限がありません。');
+        return;
+    }
+
     if (!confirm('このイベントの回答をすべて削除しますか？\nこの操作は取り消せません。')) {
         return;
     }
@@ -691,6 +728,12 @@ async function clearEventResponses(eventId) {
 function editEvent(id) {
     const event = events.find(e => e.id === id);
     if (!event) return;
+
+    // 権限チェック
+    if (!canEditEvent(event)) {
+        alert('このイベントを編集する権限がありません。');
+        return;
+    }
 
     document.getElementById('edit-event-id').value = event.id;
     document.getElementById('edit-event-name').value = event.name;

@@ -341,6 +341,63 @@ $$ LANGUAGE plpgsql;
 
 
 -- ========================================
+-- イベントテーブルのRLSポリシー（ロールベースアクセス制御）
+-- ========================================
+--
+-- system_owner: 全イベントにアクセス可能
+-- event_admin: 自身が作成したイベントのみアクセス可能
+
+-- システムオーナー判定関数
+CREATE OR REPLACE FUNCTION is_system_owner()
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN EXISTS (
+        SELECT 1 FROM user_profiles
+        WHERE user_id = auth.uid()
+        AND role = 'system_owner'
+        AND deleted_at IS NULL
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- eventsテーブルのRLS有効化
+ALTER TABLE events ENABLE ROW LEVEL SECURITY;
+
+-- 既存ポリシーを削除
+DROP POLICY IF EXISTS "events_select_policy" ON events;
+DROP POLICY IF EXISTS "events_insert_policy" ON events;
+DROP POLICY IF EXISTS "events_update_policy" ON events;
+DROP POLICY IF EXISTS "events_delete_policy" ON events;
+
+-- SELECT: システムオーナーは全イベント、それ以外は自分が作成したイベントのみ
+CREATE POLICY "events_select_policy" ON events
+    FOR SELECT USING (
+        is_system_owner()
+        OR owner_id = auth.uid()
+    );
+
+-- INSERT: 認証済みユーザーは新規イベント作成可能
+CREATE POLICY "events_insert_policy" ON events
+    FOR INSERT WITH CHECK (
+        auth.uid() IS NOT NULL
+    );
+
+-- UPDATE: システムオーナーは全イベント、それ以外は自分が作成したイベントのみ
+CREATE POLICY "events_update_policy" ON events
+    FOR UPDATE USING (
+        is_system_owner()
+        OR owner_id = auth.uid()
+    );
+
+-- DELETE: システムオーナーは全イベント、それ以外は自分が作成したイベントのみ
+CREATE POLICY "events_delete_policy" ON events
+    FOR DELETE USING (
+        is_system_owner()
+        OR owner_id = auth.uid()
+    );
+
+
+-- ========================================
 -- 使用例・補足説明
 -- ========================================
 --

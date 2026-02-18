@@ -25,17 +25,14 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-    // ユーザーを取得
-    const supabaseClient = createClient(
-      supabaseUrl,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } }
-    )
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser()
+    // JWTトークンを取得してユーザーを検証
+    const token = authHeader.replace("Bearer ", "")
+    const { data: { user }, error: userError } = await supabase.auth.getUser(token)
 
     if (userError || !user) {
+      console.error("User auth error:", userError)
       return new Response(
-        JSON.stringify({ error: "ユーザー情報の取得に失敗しました" }),
+        JSON.stringify({ error: "ユーザー情報の取得に失敗しました", details: userError?.message }),
         { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       )
     }
