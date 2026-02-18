@@ -22,6 +22,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // OAuth コールバック処理
 async function handleAuthCallback() {
+    // アカウント削除確認のチェック
+    const urlParams = new URLSearchParams(window.location.search);
+    const action = urlParams.get('action');
+    const token = urlParams.get('token');
+
+    if (action === 'delete-account' && token) {
+        // URLをクリーンアップ
+        window.history.replaceState({}, document.title, window.location.pathname);
+        // 削除確認を実行
+        await confirmAccountDeletion(token);
+        return;
+    }
+
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const accessToken = hashParams.get('access_token');
 
@@ -97,12 +110,16 @@ function hideAllAreas() {
         'login-success-area',
         'password-reset-area',
         'error-area',
-        'loading'
+        'loading',
+        'delete-email-sent-area',
+        'delete-complete-area'
     ];
     areas.forEach(id => {
         const el = document.getElementById(id);
         if (el) el.style.display = 'none';
     });
+    // モーダルも閉じる
+    closeDeleteAccountModal();
 }
 
 function showArea(areaId) {
@@ -878,4 +895,90 @@ function base64ToArrayBuffer(base64) {
         bytes[i] = binary.charCodeAt(i);
     }
     return bytes.buffer;
+}
+
+// ========== アカウント削除 ==========
+
+// 削除確認モーダルを開く
+function openDeleteAccountModal() {
+    const modal = document.getElementById('delete-account-modal');
+    if (modal) {
+        modal.style.display = 'flex';
+    }
+}
+
+// 削除確認モーダルを閉じる
+function closeDeleteAccountModal() {
+    const modal = document.getElementById('delete-account-modal');
+    if (modal) {
+        modal.style.display = 'none';
+    }
+}
+
+// 削除確認メール送信リクエスト
+async function requestAccountDeletion() {
+    const btn = document.getElementById('send-delete-email-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '送信中...';
+    }
+
+    try {
+        const { data, error } = await supabaseClient.functions.invoke('request-account-deletion');
+
+        if (error) {
+            throw error;
+        }
+
+        // 成功時：メール送信完了画面を表示
+        closeDeleteAccountModal();
+        document.getElementById('delete-email-address').textContent = currentUser?.email || '';
+        showArea('delete-email-sent-area');
+
+    } catch (error) {
+        console.error('削除リクエストエラー:', error);
+        alert('確認メールの送信に失敗しました。しばらくしてから再度お試しください。');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '確認メールを送信';
+        }
+    }
+}
+
+// アカウント削除の実行（メールリンクから呼ばれる）
+async function confirmAccountDeletion(token) {
+    showLoading('アカウントを削除中...');
+
+    try {
+        const { data, error } = await supabaseClient.functions.invoke('confirm-account-deletion', {
+            body: { token: token }
+        });
+
+        if (error) {
+            throw error;
+        }
+
+        // ローカルセッションをクリア
+        await supabaseClient.auth.signOut();
+        currentUser = null;
+
+        hideLoading();
+
+        // 削除完了画面を表示
+        showArea('delete-complete-area');
+
+    } catch (error) {
+        hideLoading();
+        console.error('アカウント削除エラー:', error);
+
+        if (error.message?.includes('無効') || error.message?.includes('期限切れ')) {
+            alert('削除リンクが無効または期限切れです。再度お試しください。');
+        } else {
+            alert('アカウントの削除に失敗しました: ' + (error.message || '不明なエラー'));
+        }
+
+        // ログイン画面に戻る
+        showLoginMode();
+    }
 }

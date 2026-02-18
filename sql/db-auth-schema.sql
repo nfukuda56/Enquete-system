@@ -47,6 +47,11 @@ CREATE INDEX IF NOT EXISTS idx_oauth_provider_lookup
 -- RLS (Row Level Security) ポリシー
 ALTER TABLE user_oauth_providers ENABLE ROW LEVEL SECURITY;
 
+-- 既存ポリシーを削除
+DROP POLICY IF EXISTS "Users can view own oauth providers" ON user_oauth_providers;
+DROP POLICY IF EXISTS "Users can insert own oauth providers" ON user_oauth_providers;
+DROP POLICY IF EXISTS "Users can delete own oauth providers" ON user_oauth_providers;
+
 -- ユーザーは自分のレコードのみ参照可能
 CREATE POLICY "Users can view own oauth providers" ON user_oauth_providers
     FOR SELECT USING (auth.uid() = user_id);
@@ -102,6 +107,12 @@ CREATE INDEX IF NOT EXISTS idx_passkey_credential_lookup
 
 -- RLS ポリシー
 ALTER TABLE user_passkeys ENABLE ROW LEVEL SECURITY;
+
+-- 既存ポリシーを削除
+DROP POLICY IF EXISTS "Users can view own passkeys" ON user_passkeys;
+DROP POLICY IF EXISTS "Users can insert own passkeys" ON user_passkeys;
+DROP POLICY IF EXISTS "Users can update own passkeys" ON user_passkeys;
+DROP POLICY IF EXISTS "Users can delete own passkeys" ON user_passkeys;
 
 -- ユーザーは自分のレコードのみ参照可能
 CREATE POLICY "Users can view own passkeys" ON user_passkeys
@@ -164,6 +175,9 @@ $$ LANGUAGE plpgsql;
 -- RLS ポリシー（匿名ユーザーからのアクセスを許可）
 ALTER TABLE email_verification_codes ENABLE ROW LEVEL SECURITY;
 
+-- 既存ポリシーを削除
+DROP POLICY IF EXISTS "Anyone can insert verification codes" ON email_verification_codes;
+
 -- 匿名ユーザーは自分のコードを挿入可能
 CREATE POLICY "Anyone can insert verification codes" ON email_verification_codes
     FOR INSERT WITH CHECK (TRUE);
@@ -184,10 +198,146 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+DROP TRIGGER IF EXISTS update_oauth_providers_updated_at ON user_oauth_providers;
 CREATE TRIGGER update_oauth_providers_updated_at
     BEFORE UPDATE ON user_oauth_providers
     FOR EACH ROW
     EXECUTE FUNCTION update_updated_at_column();
+
+
+-- ========================================
+-- ユーザープロファイルテーブル（ロール管理）
+-- ========================================
+--
+-- システムオーナー: 全イベント・全データにアクセス可能
+-- イベント管理者: 自身が作成したイベントのみアクセス可能
+
+CREATE TABLE IF NOT EXISTS user_profiles (
+    id BIGSERIAL PRIMARY KEY,
+
+    -- Supabase auth.users への外部キー
+    user_id UUID NOT NULL UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE,
+
+    -- ロール（system_owner または event_admin）
+    role TEXT NOT NULL DEFAULT 'event_admin'
+        CHECK (role IN ('system_owner', 'event_admin')),
+
+    -- 表示名
+    display_name TEXT,
+
+    -- メタデータ
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- インデックス
+CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
+
+-- RLS有効化
+ALTER TABLE user_profiles ENABLE ROW LEVEL SECURITY;
+
+-- 既存ポリシーを削除
+DROP POLICY IF EXISTS "user_profiles_select_own" ON user_profiles;
+
+-- ユーザーは自分のプロファイルを参照可能
+CREATE POLICY "user_profiles_select_own" ON user_profiles
+    FOR SELECT USING (auth.uid() = user_id);
+
+-- 新規ユーザー登録時にプロファイルを自動作成するトリガー
+CREATE OR REPLACE FUNCTION create_user_profile()
+RETURNS TRIGGER AS $$
+BEGIN
+    INSERT INTO user_profiles (user_id, role)
+    VALUES (NEW.id, 'event_admin');
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- トリガーが存在しない場合のみ作成
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_trigger WHERE tgname = 'on_auth_user_created'
+    ) THEN
+        CREATE TRIGGER on_auth_user_created
+            AFTER INSERT ON auth.users
+            FOR EACH ROW
+            EXECUTE FUNCTION create_user_profile();
+    END IF;
+END $$;
+
+-- user_profiles の updated_at 自動更新
+DROP TRIGGER IF EXISTS update_user_profiles_updated_at ON user_profiles;
+CREATE TRIGGER update_user_profiles_updated_at
+    BEFORE UPDATE ON user_profiles
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+
+-- ========================================
+-- アカウント削除機能用のカラム追加
+-- ========================================
+--
+-- email: 削除後のメールアドレス保存用
+-- deleted_at: 論理削除フラグ
+
+-- メールアドレス保存カラム追加
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS email TEXT;
+
+-- 論理削除フラグ追加
+ALTER TABLE user_profiles ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ DEFAULT NULL;
+
+-- インデックス作成
+CREATE INDEX IF NOT EXISTS idx_user_profiles_deleted_at ON user_profiles(deleted_at);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_email ON user_profiles(email);
+
+-- 外部キー制約の変更（auth.users削除時にuser_profilesは残す）
+-- 既存の制約を削除
+ALTER TABLE user_profiles DROP CONSTRAINT IF EXISTS user_profiles_user_id_fkey;
+
+-- user_id を NULL 許容に変更
+ALTER TABLE user_profiles ALTER COLUMN user_id DROP NOT NULL;
+
+-- 注意: auth.users物理削除後もuser_profilesを残すため、外部キー制約は再設定しない
+
+
+-- ========================================
+-- アカウント削除トークンテーブル
+-- ========================================
+--
+-- アカウント削除確認用の一時トークンを保存
+
+CREATE TABLE IF NOT EXISTS account_deletion_tokens (
+    id BIGSERIAL PRIMARY KEY,
+
+    -- 削除対象のユーザーID
+    user_id UUID NOT NULL,
+
+    -- 削除確認トークン（UUID形式）
+    token UUID NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+
+    -- 有効期限（30分）
+    expires_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '30 minutes'),
+
+    -- 使用済みフラグ
+    used BOOLEAN DEFAULT FALSE,
+
+    -- メタデータ
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- インデックス: トークン検索用
+CREATE INDEX IF NOT EXISTS idx_deletion_token_lookup
+    ON account_deletion_tokens(token, expires_at);
+
+-- 古いトークンを自動削除するための関数
+CREATE OR REPLACE FUNCTION cleanup_expired_deletion_tokens()
+RETURNS void AS $$
+BEGIN
+    DELETE FROM account_deletion_tokens
+    WHERE expires_at < NOW() OR used = TRUE;
+END;
+$$ LANGUAGE plpgsql;
 
 
 -- ========================================
@@ -222,3 +372,17 @@ CREATE TRIGGER update_oauth_providers_updated_at
 --
 -- 1. Supabase Dashboard > SQL Editor でこのスクリプトを実行
 -- 2. または supabase db push コマンドでマイグレーション
+
+
+-- ========================================
+-- events テーブルへの owner_id カラム追加
+-- ========================================
+--
+-- イベントの所有者を管理するためのカラム
+-- system_owner は全イベントにアクセス可能
+-- event_admin は自身が所有するイベントのみアクセス可能
+
+ALTER TABLE events ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES auth.users(id);
+
+-- インデックス
+CREATE INDEX IF NOT EXISTS idx_events_owner_id ON events(owner_id);

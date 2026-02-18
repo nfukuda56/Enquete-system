@@ -279,6 +279,82 @@
                         ログアウト
                     </button>
                 </div>
+                <hr class="auth-divider" style="margin: 20px 0;">
+                <div class="danger-zone">
+                    <button type="button" class="btn btn-danger-outline"
+                            onclick="openDeleteAccountModal()">
+                        アカウントを削除
+                    </button>
+                </div>
+            </div>
+
+            <!-- ========== アカウント削除確認モーダル ========== -->
+            <div id="delete-account-modal" class="modal" style="display: none;">
+                <div class="modal-overlay" onclick="closeDeleteAccountModal()"></div>
+                <div class="modal-content">
+                    <h2 class="modal-title danger-text">アカウント削除</h2>
+                    <div class="modal-body">
+                        <p class="warning-text">
+                            アカウントを削除すると、以下のデータが失われます:
+                        </p>
+                        <ul class="warning-list">
+                            <li>ログイン情報（メール・パスワード・Google連携・パスキー）</li>
+                            <li>作成したイベントへのアクセス権</li>
+                        </ul>
+                        <p class="warning-text danger-text">
+                            <strong>この操作は取り消せません。</strong>
+                        </p>
+                        <p>
+                            続行するには、登録されているメールアドレス宛に確認メールを送信します。
+                        </p>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-secondary"
+                                onclick="closeDeleteAccountModal()">
+                            キャンセル
+                        </button>
+                        <button type="button" class="btn btn-danger"
+                                id="send-delete-email-btn"
+                                onclick="requestAccountDeletion()">
+                            確認メールを送信
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ========== 削除メール送信完了画面 ========== -->
+            <div id="delete-email-sent-area" class="auth-card" style="display: none;">
+                <div class="warning-icon">✉</div>
+                <h2>確認メールを送信しました</h2>
+                <p class="auth-description">
+                    <span id="delete-email-address"></span> 宛に確認メールを送信しました。
+                </p>
+                <p class="auth-description">
+                    メール内のリンクをクリックすると、アカウントが削除されます。
+                </p>
+                <p class="auth-description small-text">
+                    ※ リンクは30分間有効です。
+                </p>
+                <button type="button" class="btn btn-secondary"
+                        onclick="showLoginSuccess()">
+                    戻る
+                </button>
+            </div>
+
+            <!-- ========== アカウント削除完了画面 ========== -->
+            <div id="delete-complete-area" class="auth-card" style="display: none;">
+                <div class="success-icon">✓</div>
+                <h2>アカウントが削除されました</h2>
+                <p class="auth-description">
+                    ご利用ありがとうございました。
+                </p>
+                <p class="auth-description">
+                    同じメールアドレスで再登録することも可能です。
+                </p>
+                <button type="button" class="btn btn-primary"
+                        onclick="showRegistrationMode()">
+                    新規登録へ
+                </button>
             </div>
 
             <!-- ========== パスワードリセット画面 ========== -->
