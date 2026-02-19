@@ -339,8 +339,8 @@ function updateSidebarQR() {
 
     qrContainer.innerHTML = '';
 
-    if (selectedEventId) {
-        const url = `${BASE_URL}?event=${selectedEventId}`;
+    if (selectedEventId && currentEvent?.public_token) {
+        const url = `${BASE_URL}?token=${currentEvent.public_token}`;
         new QRCode(qrContainer, {
             text: url,
             width: 100,
@@ -432,8 +432,14 @@ async function loadEvents() {
 // イベント選択ドロップダウン描画
 function renderEventSelect() {
     const select = document.getElementById('event-select');
+    const sorted = [...events].sort((a, b) => {
+        if (!a.event_date && !b.event_date) return 0;
+        if (!a.event_date) return 1;
+        if (!b.event_date) return -1;
+        return b.event_date.localeCompare(a.event_date);
+    });
     select.innerHTML = '<option value="">-- イベントを選択 --</option>' +
-        events.map(e => `
+        sorted.map(e => `
             <option value="${e.id}" ${e.id === selectedEventId ? 'selected' : ''}>
                 ${escapeHtml(e.name)}${e.event_date ? ` (${e.event_date})` : ''}
             </option>
@@ -481,7 +487,7 @@ async function selectEvent(eventId) {
 let qrCodeInstance = null;
 
 function generateQRCode() {
-    const url = `${BASE_URL}?event=${selectedEventId}`;
+    const url = `${BASE_URL}?token=${currentEvent.public_token}`;
     const qrContainer = document.getElementById('qr-code');
     const qrUrlElement = document.getElementById('qr-url');
 
@@ -503,7 +509,7 @@ function generateQRCode() {
 
 // URLコピー
 function copyEventUrl() {
-    const url = `${BASE_URL}?event=${selectedEventId}`;
+    const url = `${BASE_URL}?token=${currentEvent.public_token}`;
     navigator.clipboard.writeText(url).then(() => {
         alert('URLをコピーしました');
     }).catch(err => {
@@ -571,6 +577,7 @@ async function addEvent(nameId, dateId, descId) {
     }
 
     try {
+        const publicToken = nanoid(12);
         const { data, error } = await supabaseClient
             .from('events')
             .insert([{
@@ -579,7 +586,8 @@ async function addEvent(nameId, dateId, descId) {
                 description,
                 expected_participants: participants ? parseInt(participants) : null,
                 material_url: materialUrl,
-                owner_id: currentUser.id  // イベント所有者を設定
+                owner_id: currentUser.id,  // イベント所有者を設定
+                public_token: publicToken
             }])
             .select()
             .single();
@@ -650,14 +658,22 @@ function renderEventsList() {
         return;
     }
 
-    container.innerHTML = events.map(e => {
+    const sortedEvents = [...events].sort((a, b) => {
+        if (!a.event_date && !b.event_date) return 0;
+        if (!a.event_date) return 1;
+        if (!b.event_date) return -1;
+        return b.event_date.localeCompare(a.event_date);
+    });
+
+    container.innerHTML = sortedEvents.map(e => {
         const canEdit = canEditEvent(e);
         const canDelete = canDeleteEvent(e);
 
         return `
-        <div class="event-list-item">
+        <div class="event-list-item ${e.is_active ? '' : 'event-inactive'}">
             <div class="event-info">
                 <span class="event-name">${escapeHtml(e.name)}</span>
+                <span class="event-status-badge ${e.is_active ? 'active' : 'inactive'}">${e.is_active ? '公開中' : '非公開'}</span>
                 ${e.event_date ? `<span class="event-date">${e.event_date}</span>` : ''}
                 ${e.expected_participants ? `<span class="event-participants-badge">参加予定: ${e.expected_participants}名</span>` : ''}
                 ${e.material_url ? `<a class="event-material-link" href="${escapeHtml(e.material_url)}" target="_blank" rel="noopener">関連資料</a>` : ''}
@@ -665,6 +681,7 @@ function renderEventsList() {
             </div>
             <div class="event-actions">
                 ${canEdit ? `<button class="btn btn-sm btn-warning" onclick="clearEventResponses(${e.id})">回答クリア</button>` : ''}
+                ${canEdit ? `<button class="btn btn-sm ${e.is_active ? 'btn-warning' : 'btn-success'}" onclick="toggleEventActive(${e.id}, ${!e.is_active})">${e.is_active ? '非公開にする' : '公開する'}</button>` : ''}
                 ${canEdit ? `<button class="btn btn-sm btn-secondary" onclick="editEvent(${e.id})">編集</button>` : ''}
                 ${canDelete ? `<button class="btn btn-sm btn-danger" onclick="deleteEvent(${e.id})">削除</button>` : ''}
             </div>
@@ -673,6 +690,30 @@ function renderEventsList() {
 }
 
 // イベントごとの回答クリア
+// イベント公開/非公開切り替え
+async function toggleEventActive(id, isActive) {
+    const event = events.find(e => e.id === id);
+    if (!canEditEvent(event)) {
+        alert('このイベントを変更する権限がありません。');
+        return;
+    }
+
+    try {
+        const { error } = await supabaseClient
+            .from('events')
+            .update({ is_active: isActive })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        event.is_active = isActive;
+        renderEventsList();
+    } catch (error) {
+        console.error('イベント公開状態の更新エラー:', error);
+        alert('更新に失敗しました。');
+    }
+}
+
 async function clearEventResponses(eventId) {
     // 権限チェック
     const event = events.find(e => e.id === eventId);
@@ -1557,15 +1598,17 @@ function renderQuestionsList() {
         <div class="question-list-item ${q.is_active ? '' : 'inactive'}">
             <div class="question-order-controls">
                 <button class="btn-icon" onclick="moveQuestionUp(${q.id})" ${index === 0 ? 'disabled' : ''} title="上へ移動">▲</button>
-                <span class="question-order">Q${index + 1}</span>
                 <button class="btn-icon" onclick="moveQuestionDown(${q.id})" ${index === questions.length - 1 ? 'disabled' : ''} title="下へ移動">▼</button>
             </div>
-            <div class="question-info">
+            <span class="question-order">Q${index + 1}</span>
+            <div class="question-badges-stack">
                 <span class="question-type-badge">${getTypeLabel(q.question_type)}</span>
-                <span class="question-text">${escapeHtml(q.question_text)}</span>
                 <span class="duplicate-mode-badge ${q.duplicate_mode === 'append' ? 'append' : 'overwrite'}">
                     ${q.duplicate_mode === 'append' ? '重複回答可' : '回答更新'}
                 </span>
+            </div>
+            <div class="question-info">
+                <span class="question-text">${escapeHtml(q.question_text)}</span>
             </div>
             <div class="question-actions">
                 <button class="btn btn-sm btn-warning" onclick="clearQuestionResponses(${q.id})">

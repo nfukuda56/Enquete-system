@@ -1,0 +1,4 @@
+# ローカル設定・シークレット
+*.local.js
+.env.local
+secrets/

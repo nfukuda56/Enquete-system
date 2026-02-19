@@ -3,7 +3,8 @@
 let questions = [];
 let currentQuestion = null;  // 現在表示中の質問
 let pendingQuestionId = null;  // 次の質問ID（回答入力中に切り替わった場合）
-let eventId = null;
+let eventToken = null;  // URLから取得するNanoIDトークン
+let eventId = null;     // DB上の整数ID（内部クエリ用）
 let eventInfo = null;
 let realtimeChannel = null;
 let hasAnsweredCurrentQuestion = false;  // 現在の質問に回答済みかどうか
@@ -17,18 +18,17 @@ const RATE_LIMIT_MAX = 3;                 // 最大3回/分
 let stalenessCheckInterval = null;
 const STALENESS_TIMEOUT_MS = 90 * 1000;  // 90秒（ハートビート30秒 × 3回分の猶予）
 
-// URLパラメータからイベントID取得
-function getEventIdFromUrl() {
+// URLパラメータからイベントトークン取得
+function getEventTokenFromUrl() {
     const params = new URLSearchParams(window.location.search);
-    const id = params.get('event');
-    return id ? parseInt(id) : null;
+    return params.get('token') || null;
 }
 
 // 初期化
 document.addEventListener('DOMContentLoaded', async () => {
-    eventId = getEventIdFromUrl();
+    eventToken = getEventTokenFromUrl();
 
-    if (!eventId) {
+    if (!eventToken) {
         showNoEvent();
         return;
     }
@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // ページ可視性変更時に状態をリフレッシュ（スリープ復帰対応）
 document.addEventListener('visibilitychange', async () => {
-    if (document.visibilityState === 'visible' && eventId) {
+    if (document.visibilityState === 'visible' && eventToken) {
         console.log('ページ復帰: admin_state をリフレッシュ');
         await loadAdminState();
     }
@@ -62,7 +62,7 @@ async function loadEventInfo() {
         const { data, error } = await supabaseClient
             .from('events')
             .select('*')
-            .eq('id', eventId)
+            .eq('public_token', eventToken)
             .eq('is_active', true)
             .single();
 
@@ -71,6 +71,7 @@ async function loadEventInfo() {
         }
 
         eventInfo = data;
+        eventId = data.id;  // 内部クエリ用に整数IDをセット
         document.getElementById('event-name').textContent = eventInfo.name;
 
         // 関連資料URLが設定されている場合は表示

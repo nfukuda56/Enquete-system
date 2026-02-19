@@ -25,8 +25,21 @@ CREATE TABLE IF NOT EXISTS events (
     material_url TEXT,
     text_display_enabled BOOLEAN DEFAULT false,
     image_display_enabled BOOLEAN DEFAULT false,
+    owner_id UUID REFERENCES auth.users(id),
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- 既存テーブルへのカラム追加（マイグレーション用）
+ALTER TABLE events ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES auth.users(id);
+
+-- public_token カラム追加（URL難読化用 NanoID 12文字）
+ALTER TABLE events ADD COLUMN IF NOT EXISTS public_token TEXT;
+UPDATE events
+    SET public_token = replace(replace(
+        encode(gen_random_bytes(9), 'base64'), '/', '_'), '+', '-')
+    WHERE public_token IS NULL;
+ALTER TABLE events ALTER COLUMN public_token SET NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_events_public_token ON events(public_token);
 
 COMMENT ON TABLE events IS 'イベント管理テーブル';
 COMMENT ON COLUMN events.name IS 'イベント名';
@@ -107,6 +120,7 @@ COMMENT ON TABLE rate_limits IS '投稿レート制限テーブル';
 -- events
 CREATE INDEX IF NOT EXISTS idx_events_is_active ON events(is_active);
 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_events_owner_id ON events(owner_id);
 
 -- questions
 CREATE INDEX IF NOT EXISTS idx_questions_event_id ON questions(event_id);
@@ -139,29 +153,205 @@ ALTER TABLE responses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admin_state ENABLE ROW LEVEL SECURITY;
 ALTER TABLE rate_limits ENABLE ROW LEVEL SECURITY;
 
--- events
-CREATE POLICY "events_select_policy" ON events FOR SELECT USING (true);
-CREATE POLICY "events_insert_policy" ON events FOR INSERT WITH CHECK (true);
-CREATE POLICY "events_update_policy" ON events FOR UPDATE USING (true);
-CREATE POLICY "events_delete_policy" ON events FOR DELETE USING (true);
+-- events（ロールベースアクセス制御）
+-- 既存ポリシーを削除して再作成
+DROP POLICY IF EXISTS "events_select_policy" ON events;
+DROP POLICY IF EXISTS "events_insert_policy" ON events;
+DROP POLICY IF EXISTS "events_update_policy" ON events;
+DROP POLICY IF EXISTS "events_delete_policy" ON events;
 
--- questions
-CREATE POLICY "questions_select_policy" ON questions FOR SELECT USING (true);
-CREATE POLICY "questions_insert_policy" ON questions FOR INSERT WITH CHECK (true);
-CREATE POLICY "questions_update_policy" ON questions FOR UPDATE USING (true);
-CREATE POLICY "questions_delete_policy" ON questions FOR DELETE USING (true);
+-- SELECT: 参加者は公開イベント、システムオーナーは全件、イベント管理者は自分のイベントのみ
+CREATE POLICY "events_select_by_role" ON events FOR SELECT USING (
+    (auth.uid() IS NULL AND is_active = true)  -- 未認証の参加者は公開イベントのみ
+    OR EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+    OR owner_id = auth.uid()
+);
 
--- responses
-CREATE POLICY "responses_select_policy" ON responses FOR SELECT USING (true);
-CREATE POLICY "responses_insert_policy" ON responses FOR INSERT WITH CHECK (true);
-CREATE POLICY "responses_update_policy" ON responses FOR UPDATE USING (true);
-CREATE POLICY "responses_delete_policy" ON responses FOR DELETE USING (true);
+-- INSERT: 認証済みユーザーは自分をowner_idに設定して作成可能
+CREATE POLICY "events_insert_authenticated" ON events FOR INSERT
+    WITH CHECK (auth.uid() IS NOT NULL AND owner_id = auth.uid());
 
--- admin_state
-CREATE POLICY "admin_state_select_policy" ON admin_state FOR SELECT USING (true);
-CREATE POLICY "admin_state_insert_policy" ON admin_state FOR INSERT WITH CHECK (true);
-CREATE POLICY "admin_state_update_policy" ON admin_state FOR UPDATE USING (true);
-CREATE POLICY "admin_state_delete_policy" ON admin_state FOR DELETE USING (true);
+-- UPDATE: システムオーナーまたは所有者のみ
+CREATE POLICY "events_update_by_role" ON events FOR UPDATE USING (
+    EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+    OR owner_id = auth.uid()
+);
+
+-- DELETE: システムオーナーまたは所有者のみ
+CREATE POLICY "events_delete_by_role" ON events FOR DELETE USING (
+    EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+    OR owner_id = auth.uid()
+);
+
+-- questions（ロールベースアクセス制御: イベント所有者に基づく）
+DROP POLICY IF EXISTS "questions_select_policy" ON questions;
+DROP POLICY IF EXISTS "questions_insert_policy" ON questions;
+DROP POLICY IF EXISTS "questions_update_policy" ON questions;
+DROP POLICY IF EXISTS "questions_delete_policy" ON questions;
+
+-- SELECT: 参加者は公開イベントの質問、認証ユーザーは権限のあるイベントの質問
+CREATE POLICY "questions_select_by_role" ON questions FOR SELECT USING (
+    EXISTS (
+        SELECT 1 FROM events e
+        WHERE e.id = questions.event_id
+        AND (
+            (auth.uid() IS NULL AND e.is_active = true)
+            OR EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+            OR e.owner_id = auth.uid()
+        )
+    )
+);
+
+-- INSERT: イベント所有者またはシステムオーナーのみ
+CREATE POLICY "questions_insert_by_role" ON questions FOR INSERT WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM events e
+        WHERE e.id = questions.event_id
+        AND (
+            EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+            OR e.owner_id = auth.uid()
+        )
+    )
+);
+
+-- UPDATE: イベント所有者またはシステムオーナーのみ
+CREATE POLICY "questions_update_by_role" ON questions FOR UPDATE USING (
+    EXISTS (
+        SELECT 1 FROM events e
+        WHERE e.id = questions.event_id
+        AND (
+            EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+            OR e.owner_id = auth.uid()
+        )
+    )
+);
+
+-- DELETE: イベント所有者またはシステムオーナーのみ
+CREATE POLICY "questions_delete_by_role" ON questions FOR DELETE USING (
+    EXISTS (
+        SELECT 1 FROM events e
+        WHERE e.id = questions.event_id
+        AND (
+            EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+            OR e.owner_id = auth.uid()
+        )
+    )
+);
+
+-- responses（ロールベースアクセス制御: イベント所有者に基づく）
+DROP POLICY IF EXISTS "responses_select_policy" ON responses;
+DROP POLICY IF EXISTS "responses_insert_policy" ON responses;
+DROP POLICY IF EXISTS "responses_update_policy" ON responses;
+DROP POLICY IF EXISTS "responses_delete_policy" ON responses;
+
+-- SELECT: 参加者は公開イベントの回答、認証ユーザーは権限のあるイベントの回答
+CREATE POLICY "responses_select_by_role" ON responses FOR SELECT USING (
+    EXISTS (
+        SELECT 1 FROM questions q
+        JOIN events e ON e.id = q.event_id
+        WHERE q.id = responses.question_id
+        AND (
+            (auth.uid() IS NULL AND e.is_active = true)
+            OR EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+            OR e.owner_id = auth.uid()
+        )
+    )
+);
+
+-- INSERT: 参加者（認証不要）または権限のある認証ユーザー
+CREATE POLICY "responses_insert_by_role" ON responses FOR INSERT WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM questions q
+        JOIN events e ON e.id = q.event_id
+        WHERE q.id = responses.question_id
+        AND (
+            e.is_active = true  -- 参加者は公開イベントに回答可能
+            OR EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+            OR e.owner_id = auth.uid()
+        )
+    )
+);
+
+-- UPDATE: イベント所有者またはシステムオーナーのみ
+CREATE POLICY "responses_update_by_role" ON responses FOR UPDATE USING (
+    EXISTS (
+        SELECT 1 FROM questions q
+        JOIN events e ON e.id = q.event_id
+        WHERE q.id = responses.question_id
+        AND (
+            EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+            OR e.owner_id = auth.uid()
+        )
+    )
+);
+
+-- DELETE: イベント所有者またはシステムオーナーのみ
+CREATE POLICY "responses_delete_by_role" ON responses FOR DELETE USING (
+    EXISTS (
+        SELECT 1 FROM questions q
+        JOIN events e ON e.id = q.event_id
+        WHERE q.id = responses.question_id
+        AND (
+            EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+            OR e.owner_id = auth.uid()
+        )
+    )
+);
+
+-- admin_state（ロールベースアクセス制御: イベント所有者に基づく）
+DROP POLICY IF EXISTS "admin_state_select_policy" ON admin_state;
+DROP POLICY IF EXISTS "admin_state_insert_policy" ON admin_state;
+DROP POLICY IF EXISTS "admin_state_update_policy" ON admin_state;
+DROP POLICY IF EXISTS "admin_state_delete_policy" ON admin_state;
+
+-- SELECT: 参加者は公開イベントの状態、認証ユーザーは権限のあるイベントの状態
+CREATE POLICY "admin_state_select_by_role" ON admin_state FOR SELECT USING (
+    EXISTS (
+        SELECT 1 FROM events e
+        WHERE e.id = admin_state.event_id
+        AND (
+            (auth.uid() IS NULL AND e.is_active = true)
+            OR EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+            OR e.owner_id = auth.uid()
+        )
+    )
+);
+
+-- INSERT: イベント所有者またはシステムオーナーのみ
+CREATE POLICY "admin_state_insert_by_role" ON admin_state FOR INSERT WITH CHECK (
+    EXISTS (
+        SELECT 1 FROM events e
+        WHERE e.id = admin_state.event_id
+        AND (
+            EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+            OR e.owner_id = auth.uid()
+        )
+    )
+);
+
+-- UPDATE: イベント所有者またはシステムオーナーのみ
+CREATE POLICY "admin_state_update_by_role" ON admin_state FOR UPDATE USING (
+    EXISTS (
+        SELECT 1 FROM events e
+        WHERE e.id = admin_state.event_id
+        AND (
+            EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+            OR e.owner_id = auth.uid()
+        )
+    )
+);
+
+-- DELETE: イベント所有者またはシステムオーナーのみ
+CREATE POLICY "admin_state_delete_by_role" ON admin_state FOR DELETE USING (
+    EXISTS (
+        SELECT 1 FROM events e
+        WHERE e.id = admin_state.event_id
+        AND (
+            EXISTS (SELECT 1 FROM user_profiles WHERE user_id = auth.uid() AND role = 'system_owner')
+            OR e.owner_id = auth.uid()
+        )
+    )
+);
 
 -- rate_limits
 CREATE POLICY "rate_limits_select_policy" ON rate_limits FOR SELECT USING (true);
@@ -211,6 +401,31 @@ CREATE POLICY "survey_images_delete_policy" ON storage.objects
     FOR DELETE USING (bucket_id = 'survey-images');
 
 -- =====================================================
+-- 6. データ移行（既存環境用）
+-- =====================================================
+
+-- 既存ユーザー全員に event_admin プロファイルを作成
+INSERT INTO user_profiles (user_id, role)
+SELECT id, 'event_admin' FROM auth.users
+ON CONFLICT (user_id) DO NOTHING;
+
+-- 既存イベントの owner_id を設定（システムオーナーがいる場合）
+-- ※ 最初のシステムオーナー設定後に実行
+-- UPDATE events
+-- SET owner_id = (
+--     SELECT user_id FROM user_profiles WHERE role = 'system_owner' LIMIT 1
+-- )
+-- WHERE owner_id IS NULL;
+
+-- =====================================================
+-- 7. システムオーナー設定（手動実行）
+-- =====================================================
+-- 特定メールアドレスのユーザーをシステムオーナーに設定する場合:
+-- UPDATE user_profiles
+-- SET role = 'system_owner'
+-- WHERE user_id = (SELECT id FROM auth.users WHERE email = 'YOUR_EMAIL@example.com');
+
+-- =====================================================
 -- セットアップ完了
 -- =====================================================
 -- 次のステップ:
@@ -219,4 +434,5 @@ CREATE POLICY "survey_images_delete_policy" ON storage.objects
 --    - anon public key (SUPABASE_ANON_KEY)
 -- 2. config.js の値を更新
 -- 3. admin.html にアクセスして動作確認
+-- 4. 必要に応じてシステムオーナーを設定
 -- =====================================================
