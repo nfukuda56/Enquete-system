@@ -1,5 +1,13 @@
 // 管理者用アプリケーション
 
+// URLトークン生成（crypto.getRandomValues使用、NanoID互換12文字）
+function generatePublicToken() {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-';
+    const array = new Uint8Array(12);
+    crypto.getRandomValues(array);
+    return Array.from(array, b => chars[b % chars.length]).join('');
+}
+
 // 現在のユーザー情報
 let currentUser = null;
 let userProfile = null;
@@ -577,7 +585,7 @@ async function addEvent(nameId, dateId, descId) {
     }
 
     try {
-        const publicToken = nanoid(12);
+        const publicToken = generatePublicToken();
         const { data, error } = await supabaseClient
             .from('events')
             .insert([{
