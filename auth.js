@@ -3,7 +3,6 @@
 // 状態管理
 let authMode = 'register'; // 'register', 'login', 'edit'
 let verifiedEmail = null;
-let verificationCode = null;
 let currentUser = null;
 
 // 一時的な認証データ（登録完了前）
@@ -228,11 +227,6 @@ function showLoginSuccess() {
 
 // ========== メール確認フロー ==========
 
-// 6桁の確認コードを生成
-function generateVerificationCode() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
-}
-
 // 登録キー送信
 async function sendVerificationKey() {
     const email = document.getElementById('email-input').value.trim();
@@ -252,15 +246,12 @@ async function sendVerificationKey() {
     btn.textContent = '送信中...';
 
     try {
-        // 6桁のランダムコードを生成
-        verificationCode = generateVerificationCode();
         verifiedEmail = email;
 
-        // Supabase Edge Functionでメール送信
+        // Edge Functionでコード生成・DB保存・メール送信（コードはサーバー側で生成）
         const { data, error } = await supabaseClient.functions.invoke('send-verification-email', {
             body: {
                 email: email,
-                code: verificationCode,
                 mode: authMode
             }
         });
@@ -286,8 +277,6 @@ async function sendVerificationKey() {
 
 // キー再送信
 async function resendVerificationKey() {
-    verificationCode = generateVerificationCode();
-
     const btn = document.getElementById('send-key-btn');
     btn.disabled = true;
     btn.textContent = '送信中...';
@@ -296,7 +285,6 @@ async function resendVerificationKey() {
         const { data, error } = await supabaseClient.functions.invoke('send-verification-email', {
             body: {
                 email: verifiedEmail,
-                code: verificationCode,
                 mode: authMode
             }
         });
@@ -315,8 +303,8 @@ async function resendVerificationKey() {
     }
 }
 
-// キー確認
-function verifyKey() {
+// キー確認（サーバー側で照合）
+async function verifyKey() {
     const inputKey = document.getElementById('verification-key').value.trim();
 
     if (!inputKey) {
@@ -324,12 +312,39 @@ function verifyKey() {
         return;
     }
 
-    // コード一致チェック
-    if (inputKey === verificationCode) {
-        // 登録フォームを表示
-        showRegistrationForm();
-    } else {
-        alert('登録キーが一致しません。');
+    const btn = document.getElementById('verify-key-btn');
+    if (btn) {
+        btn.disabled = true;
+        btn.textContent = '確認中...';
+    }
+
+    try {
+        console.log('[verifyKey] 呼び出し開始:', { email: verifiedEmail, mode: authMode });
+        const { data, error } = await supabaseClient.functions.invoke('verify-email-code', {
+            body: {
+                email: verifiedEmail,
+                code: inputKey,
+                mode: authMode
+            }
+        });
+
+        console.log('[verifyKey] 結果:', { data, error });
+
+        if (error) throw error;
+
+        if (data && data.valid) {
+            showRegistrationForm();
+        } else {
+            alert(data?.error || '登録キーが一致しません。');
+        }
+    } catch (error) {
+        console.error('[verifyKey] キー確認エラー:', error);
+        alert('確認中にエラーが発生しました。しばらくしてから再度お試しください。');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.textContent = '確認して次へ';
+        }
     }
 }
 

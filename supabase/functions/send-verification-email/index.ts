@@ -11,12 +11,45 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email, code, mode } = await req.json()
+    const { email, mode } = await req.json()
 
-    if (!email || !code) {
+    if (!email) {
       return new Response(
-        JSON.stringify({ error: "email and code are required" }),
+        JSON.stringify({ error: "email is required" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      )
+    }
+
+    // コードをサーバー側で生成（クライアントには返さない）
+    const code = String(Math.floor(100000 + Math.random() * 900000))
+
+    // Service Role クライアントでDBに保存
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!
+    const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+    const supabase = createClient(supabaseUrl, supabaseServiceKey)
+
+    // 既存の未使用コードを無効化（同一メール・用途の重複防止）
+    await supabase
+      .from("email_verification_codes")
+      .update({ used: true })
+      .eq("email", email)
+      .eq("purpose", mode === "edit" ? "edit" : "register")
+      .eq("used", false)
+
+    // 新しい確認コードをDBに保存（有効期限10分はDBデフォルト値）
+    const { error: insertError } = await supabase
+      .from("email_verification_codes")
+      .insert({
+        email: email,
+        code: code,
+        purpose: mode === "edit" ? "edit" : "register",
+      })
+
+    if (insertError) {
+      console.error("DB insert error:", insertError)
+      return new Response(
+        JSON.stringify({ error: "Failed to store verification code" }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       )
     }
 
@@ -29,7 +62,7 @@ Deno.serve(async (req) => {
     }
 
     const fromEmail = Deno.env.get("EMAIL_FROM") || "onboarding@resend.dev"
-    const isRegister = mode === "register"
+    const isRegister = mode !== "edit"
     const subject = isRegister ? "登録確認コード" : "認証確認コード"
 
     const htmlContent = "<div style='font-family:sans-serif;max-width:600px;margin:0 auto;padding:20px'>" +
