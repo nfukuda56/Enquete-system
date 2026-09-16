@@ -142,12 +142,12 @@ Deno.serve(async (req) => {
 
     const newStatus = shouldBlock ? 'blocked' : 'approved'
 
-    // DB 更新
+    // DB 更新（スコアを保存）
     await supabaseAdmin
       .from('responses')
       .update({
         moderation_status: newStatus,
-        moderation_categories: result.categories,
+        moderation_categories: result.category_scores,
         moderation_timestamp: new Date().toISOString(),
       })
       .eq('id', response_id)

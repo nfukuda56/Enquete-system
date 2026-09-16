@@ -50,6 +50,7 @@ ALTER TABLE user_oauth_providers ENABLE ROW LEVEL SECURITY;
 -- 既存ポリシーを削除
 DROP POLICY IF EXISTS "Users can view own oauth providers" ON user_oauth_providers;
 DROP POLICY IF EXISTS "Users can insert own oauth providers" ON user_oauth_providers;
+DROP POLICY IF EXISTS "Users can update own oauth providers" ON user_oauth_providers;
 DROP POLICY IF EXISTS "Users can delete own oauth providers" ON user_oauth_providers;
 
 -- ユーザーは自分のレコードのみ参照可能
@@ -59,6 +60,10 @@ CREATE POLICY "Users can view own oauth providers" ON user_oauth_providers
 -- ユーザーは自分のレコードのみ追加可能
 CREATE POLICY "Users can insert own oauth providers" ON user_oauth_providers
     FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+-- ユーザーは自分のレコードのみ更新可能（upsert用）
+CREATE POLICY "Users can update own oauth providers" ON user_oauth_providers
+    FOR UPDATE USING (auth.uid() = user_id);
 
 -- ユーザーは自分のレコードのみ削除可能
 CREATE POLICY "Users can delete own oauth providers" ON user_oauth_providers
