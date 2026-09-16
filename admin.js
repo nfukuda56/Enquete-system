@@ -1134,9 +1134,11 @@ function renderResults() {
         renderChart(question);
     }
 
-    // 自由記述カードのドラッグ＆ドロップ並べ替えを有効化
+    // 自由記述カードのドラッグ＆ドロップ並べ替えを有効化し、
+    // モデレーション未処理の回答があれば自動で送信する
     if (question.question_type === 'text') {
         initTextResponseDnd(question.id);
+        requestModerationForUnprocessed(questionResponses);
     }
 }
 
@@ -1271,6 +1273,43 @@ function updateModerationStatsToolbar(question, questionResponses) {
     el.style.display = 'inline-flex';
 }
 
+// 自動モデレーション: 既に送信した回答ID（同一セッション内での重複送信を防ぐ）
+const moderationRequestedIds = new Set();
+// 1回の描画で送信する上限（OpenAI Moderation API のコスト抑制）
+const MODERATION_AUTO_LIMIT = 20;
+
+// 未処理の回答をモデレーションに送る（fire-and-forget）
+// 完了すると responses の UPDATE が Realtime で届き、再描画で背景色が白に変わる
+function requestModerationForUnprocessed(questionResponses) {
+    const targets = questionResponses
+        .filter(r => isModerationUnprocessed(r) && !moderationRequestedIds.has(r.id))
+        .slice(0, MODERATION_AUTO_LIMIT);
+
+    if (targets.length === 0) return;
+
+    console.log(`未処理の回答 ${targets.length} 件をモデレーションに送信します`);
+
+    targets.forEach(r => {
+        moderationRequestedIds.add(r.id);
+        fetch(`${SUPABASE_URL}/functions/v1/moderate-content`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+            },
+            body: JSON.stringify({ response_id: r.id }),
+        })
+            .then(res => {
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            })
+            .catch(err => {
+                console.warn(`モデレーション要求に失敗しました (id=${r.id}):`, err);
+                // 次回の描画で再試行できるように記録を戻す
+                moderationRequestedIds.delete(r.id);
+            });
+    });
+}
+
 // テキスト回答の並び順（ブラウザローカルに保存）
 function getTextOrderKey(questionId) {
     return `enquete:textOrder:${selectedEventId}:${questionId}`;
@@ -1313,12 +1352,15 @@ function applyTextOrder(questionId, items) {
     return known.concat(unknown);
 }
 
+// モデレーション未処理かどうか
+// DBへ直接投入された回答など、Edge Function を通っていない行は
+// moderation_timestamp が null のままになる
+function isModerationUnprocessed(response) {
+    return !response.moderation_timestamp;
+}
+
 // テキスト回答一覧（カード表示）
 function generateTextResponses(question, questionResponses) {
-    if (!currentEvent?.text_display_enabled) {
-        return `<p class="display-off-notice">自由記述の表示がOFFです（ヘッダーのトグルで切り替え）</p>`;
-    }
-
     const visible = questionResponses.filter(r => r.moderation_status !== 'blocked');
     if (visible.length === 0) {
         return `<p class="no-responses">まだ回答がありません</p>`;
@@ -1329,7 +1371,7 @@ function generateTextResponses(question, questionResponses) {
     return `
         <div class="text-responses-grid" id="text-responses-grid">
             ${ordered.map(r => `
-                <div class="text-response-card ${r.moderation_status === 'pending' ? 'pending-moderation' : ''}"
+                <div class="text-response-card ${isModerationUnprocessed(r) ? 'moderation-unprocessed' : ''}"
                      draggable="true" data-response-id="${r.id}">
                     <div class="text-response-content">${escapeHtml(r.answer)}</div>
                     <button class="btn-block-response" onclick="blockResponse(${r.id})">非表示</button>
@@ -1341,10 +1383,6 @@ function generateTextResponses(question, questionResponses) {
 
 // 画像ギャラリー表示
 function generateImageGallery(questionResponses) {
-    if (!currentEvent?.image_display_enabled) {
-        return `<p class="display-off-notice">画像投稿の表示がOFFです（ヘッダーのトグルで切り替え）</p>`;
-    }
-
     const visible = questionResponses.filter(r => r.moderation_status !== 'blocked');
     if (visible.length === 0) {
         return `<p class="no-responses">まだ回答がありません</p>`;

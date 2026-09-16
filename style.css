@@ -616,6 +616,7 @@ header h1 {
     padding: 16px;
 }
 
+/* 処理済み: 白背景 */
 .text-response-card {
     position: relative;
     display: flex;
@@ -627,7 +628,13 @@ header h1 {
     border-radius: 12px;
     box-shadow: var(--shadow);
     cursor: grab;
-    transition: box-shadow 0.2s, transform 0.2s;
+    transition: background 0.3s, box-shadow 0.2s, transform 0.2s;
+}
+
+/* モデレーション未処理: 薄黄色の背景 */
+.text-response-card.moderation-unprocessed {
+    background: #FEFCE8;
+    border-color: #FDE68A;
 }
 
 .text-response-card:hover {
@@ -1969,7 +1976,7 @@ header .event-name {
     background: #B91C1C !important;
 }
 
-/* 表示OFF通知 */
+/* 表示OFF通知（管理画面は常時表示にしたため現在は未使用。表示制御を戻す場合に再利用） */
 .display-off-notice {
     text-align: center;
     padding: 40px 20px;
@@ -2067,10 +2074,7 @@ header .event-name {
     opacity: 1;
 }
 
-/* 審査待ちアイテム */
-.pending-moderation {
-    border-left: 3px solid #F59E0B;
-}
+/* 審査待ちの表現は .text-response-card.moderation-unprocessed の背景色に統合 */
 
 /* 参加者画面: ポリシー同意カード */
 .policy-agreement-card {
