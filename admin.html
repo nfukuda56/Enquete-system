@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>管理画面 - 伝心くん</title>
     <link rel="icon" type="image/png" href="densin_favi.png">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=2.2.0">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
@@ -55,6 +55,7 @@
                     <button class="btn btn-sm toggle-off" id="text-display-toggle" onclick="toggleTextDisplay()">OFF</button>
                     <span class="toolbar-label">画像:</span>
                     <button class="btn btn-sm toggle-off" id="image-display-toggle" onclick="toggleImageDisplay()">OFF</button>
+                    <span class="moderation-stats" id="moderation-stats" style="display:none"></span>
                     <button class="btn btn-sm btn-emergency-stop" onclick="emergencyStopDisplay()">緊急停止</button>
                 </div>
             </header>
@@ -322,7 +323,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js?v=2.1.0"></script>
-    <script src="admin.js?v=2.1.0"></script>
+    <script src="config.js?v=2.2.0"></script>
+    <script src="admin.js?v=2.2.0"></script>
 </body>
 </html>

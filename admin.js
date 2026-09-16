@@ -1092,6 +1092,7 @@ function renderResults() {
         container.innerHTML = '<p class="no-data">イベント管理からイベントを作成、選択してください。</p>';
         loading.style.display = 'none';
         container.style.display = 'block';
+        updateModerationStatsToolbar(null, []);
         return;
     }
 
@@ -1101,6 +1102,7 @@ function renderResults() {
         container.innerHTML = '<p class="no-data">まだ質問が登録されていません。</p>';
         loading.style.display = 'none';
         container.style.display = 'block';
+        updateModerationStatsToolbar(null, []);
         return;
     }
 
@@ -1124,9 +1126,17 @@ function renderResults() {
     loading.style.display = 'none';
     container.style.display = 'block';
 
+    // モデレーション統計をヘッダーに反映（自由記述・画像のときのみ表示）
+    updateModerationStatsToolbar(question, questionResponses);
+
     // グラフを描画（text/image以外、かつ回答率30%超過時のみ）
     if (question.question_type !== 'text' && question.question_type !== 'image' && shouldShowChart) {
         renderChart(question);
+    }
+
+    // 自由記述カードのドラッグ＆ドロップ並べ替えを有効化
+    if (question.question_type === 'text') {
+        initTextResponseDnd(question.id);
     }
 }
 
@@ -1162,7 +1172,7 @@ function generateResultCard(question, questionResponses, index, totalQuestions, 
 
     let contentHTML = '';
     if (question.question_type === 'text') {
-        contentHTML = generateTextResponses(questionResponses);
+        contentHTML = generateTextResponses(question, questionResponses);
     } else if (question.question_type === 'image') {
         contentHTML = generateImageGallery(questionResponses);
     } else if (shouldShowChart) {
@@ -1240,35 +1250,89 @@ function calculateModerationStats(questionResponses) {
     return { blocked, maxScore };
 }
 
-// モデレーション統計HTMLを生成
-function generateModerationStatsHtml(questionResponses) {
+// モデレーション統計をヘッダーツールバーに反映
+// 自由記述・画像の質問を表示中のみ表示し、それ以外では非表示にする
+function updateModerationStatsToolbar(question, questionResponses) {
+    const el = document.getElementById('moderation-stats');
+    if (!el) return;
+
+    const isModeratedType = question
+        && (question.question_type === 'text' || question.question_type === 'image');
+
+    if (!isModeratedType) {
+        el.style.display = 'none';
+        el.textContent = '';
+        return;
+    }
+
     const stats = calculateModerationStats(questionResponses);
     const scoreDisplay = stats.maxScore > 0 ? stats.maxScore.toFixed(2) : '-';
-    return `<div class="moderation-stats">🚫 ブロック: ${stats.blocked}件 | 最高スコア: ${scoreDisplay}</div>`;
+    el.textContent = `🚫 ブロック: ${stats.blocked}件 | 最高スコア: ${scoreDisplay}`;
+    el.style.display = 'inline-flex';
 }
 
-// テキスト回答一覧
-function generateTextResponses(questionResponses) {
-    const statsHtml = generateModerationStatsHtml(questionResponses);
+// テキスト回答の並び順（ブラウザローカルに保存）
+function getTextOrderKey(questionId) {
+    return `enquete:textOrder:${selectedEventId}:${questionId}`;
+}
 
+function loadTextOrder(questionId) {
+    try {
+        const raw = localStorage.getItem(getTextOrderKey(questionId));
+        const parsed = raw ? JSON.parse(raw) : null;
+        return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveTextOrder(questionId, ids) {
+    try {
+        localStorage.setItem(getTextOrderKey(questionId), JSON.stringify(ids));
+    } catch (e) {
+        console.warn('並び順の保存に失敗しました:', e);
+    }
+}
+
+// 保存済みの並び順を適用（未知の新着回答は末尾に元の順序で残す）
+function applyTextOrder(questionId, items) {
+    const order = loadTextOrder(questionId);
+    if (order.length === 0) return items;
+
+    const rank = new Map(order.map((id, i) => [String(id), i]));
+    const known = [];
+    const unknown = [];
+    items.forEach(item => {
+        if (rank.has(String(item.id))) {
+            known.push(item);
+        } else {
+            unknown.push(item);
+        }
+    });
+    known.sort((a, b) => rank.get(String(a.id)) - rank.get(String(b.id)));
+    return known.concat(unknown);
+}
+
+// テキスト回答一覧（カード表示）
+function generateTextResponses(question, questionResponses) {
     if (!currentEvent?.text_display_enabled) {
-        return `<p class="display-off-notice">自由記述の表示がOFFです（ヘッダーのトグルで切り替え）</p>${statsHtml}`;
+        return `<p class="display-off-notice">自由記述の表示がOFFです（ヘッダーのトグルで切り替え）</p>`;
     }
 
     const visible = questionResponses.filter(r => r.moderation_status !== 'blocked');
     if (visible.length === 0) {
-        return `<p class="no-responses">まだ回答がありません</p>${statsHtml}`;
+        return `<p class="no-responses">まだ回答がありません</p>`;
     }
 
+    const ordered = applyTextOrder(question.id, visible);
+
     return `
-        ${statsHtml}
-        <div class="text-responses">
-            ${visible.map(r => `
-                <div class="text-response-item ${r.moderation_status === 'pending' ? 'pending-moderation' : ''}">
+        <div class="text-responses-grid" id="text-responses-grid">
+            ${ordered.map(r => `
+                <div class="text-response-card ${r.moderation_status === 'pending' ? 'pending-moderation' : ''}"
+                     draggable="true" data-response-id="${r.id}">
                     <div class="text-response-content">${escapeHtml(r.answer)}</div>
-                    <div class="text-response-actions">
-                        <button class="btn-block-response" onclick="blockResponse(${r.id})">非表示</button>
-                    </div>
+                    <button class="btn-block-response" onclick="blockResponse(${r.id})">非表示</button>
                 </div>
             `).join('')}
         </div>
@@ -1277,19 +1341,16 @@ function generateTextResponses(questionResponses) {
 
 // 画像ギャラリー表示
 function generateImageGallery(questionResponses) {
-    const statsHtml = generateModerationStatsHtml(questionResponses);
-
     if (!currentEvent?.image_display_enabled) {
-        return `<p class="display-off-notice">画像投稿の表示がOFFです（ヘッダーのトグルで切り替え）</p>${statsHtml}`;
+        return `<p class="display-off-notice">画像投稿の表示がOFFです（ヘッダーのトグルで切り替え）</p>`;
     }
 
     const visible = questionResponses.filter(r => r.moderation_status !== 'blocked');
     if (visible.length === 0) {
-        return `<p class="no-responses">まだ回答がありません</p>${statsHtml}`;
+        return `<p class="no-responses">まだ回答がありません</p>`;
     }
 
     return `
-        ${statsHtml}
         <div class="image-gallery">
             ${visible.map(r => `
                 <div class="image-tile">
@@ -1302,6 +1363,65 @@ function generateImageGallery(questionResponses) {
             `).join('')}
         </div>
     `;
+}
+
+// テキスト回答カードのドラッグ＆ドロップ並べ替えを有効化
+function initTextResponseDnd(questionId) {
+    const grid = document.getElementById('text-responses-grid');
+    if (!grid) return;
+
+    let dragged = null;
+
+    grid.querySelectorAll('.text-response-card').forEach(card => {
+        card.addEventListener('dragstart', (e) => {
+            dragged = card;
+            card.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', card.dataset.responseId);
+        });
+        card.addEventListener('dragend', () => {
+            card.classList.remove('dragging');
+            dragged = null;
+            persistTextOrder(questionId);
+        });
+    });
+
+    grid.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        if (!dragged) return;
+        e.dataTransfer.dropEffect = 'move';
+        const target = getDragTargetCard(grid, e.clientX, e.clientY);
+        if (target === null) {
+            grid.appendChild(dragged);
+        } else if (target !== dragged) {
+            grid.insertBefore(dragged, target);
+        }
+    });
+
+    grid.addEventListener('drop', (e) => e.preventDefault());
+}
+
+// ポインタ位置から「この直前に挿入すべきカード」を求める（null は末尾）
+function getDragTargetCard(grid, x, y) {
+    const cards = Array.from(grid.querySelectorAll('.text-response-card:not(.dragging)'));
+    return cards.find(card => {
+        const box = card.getBoundingClientRect();
+        // 同じ行にいる場合は、カード中心より左なら手前に挿入
+        if (y >= box.top && y <= box.bottom) {
+            return x < box.left + box.width / 2;
+        }
+        // カードの行より上にいる場合は、その手前に挿入
+        return y < box.top;
+    }) || null;
+}
+
+// 現在のDOM順を並び順として保存
+function persistTextOrder(questionId) {
+    const grid = document.getElementById('text-responses-grid');
+    if (!grid) return;
+    const ids = Array.from(grid.querySelectorAll('.text-response-card'))
+        .map(card => card.dataset.responseId);
+    saveTextOrder(questionId, ids);
 }
 
 // 画像拡大モーダル
