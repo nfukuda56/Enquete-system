@@ -8,6 +8,7 @@ let eventId = null;     // DB上の整数ID（内部クエリ用）
 let eventInfo = null;
 let realtimeChannel = null;
 let hasAnsweredCurrentQuestion = false;  // 現在の質問に回答済みかどうか
+let refetchedQuestionId = null;  // 再取得を試みた質問ID（同じIDで繰り返さないためのガード）
 
 // 投稿制御
 let policyAgreedAt = null;  // ポリシー同意日時
@@ -90,7 +91,9 @@ async function loadEventInfo() {
 }
 
 // 質問を読み込む
-async function loadQuestions() {
+// silent: true のときは画面遷移を伴う副作用（エラー画面・質問なし画面・
+//         ローディング非表示）を行わない。会期中の再取得で使用する
+async function loadQuestions({ silent = false } = {}) {
     try {
         const { data, error } = await supabaseClient
             .from('questions')
@@ -104,15 +107,17 @@ async function loadQuestions() {
         questions = data || [];
 
         if (questions.length === 0) {
-            showNoQuestions();
+            if (!silent) showNoQuestions();
             return;
         }
 
         // ローディング非表示（admin_stateで表示を制御）
-        document.getElementById('loading').style.display = 'none';
+        if (!silent) {
+            document.getElementById('loading').style.display = 'none';
+        }
     } catch (error) {
         console.error('質問読み込みエラー:', error);
-        showError('質問の読み込みに失敗しました。');
+        if (!silent) showError('質問の読み込みに失敗しました。');
     }
 }
 
@@ -132,7 +137,7 @@ async function loadAdminState() {
             throw error;
         }
 
-        handleAdminState(data);
+        await handleAdminState(data);
     } catch (error) {
         console.error('admin_state読み込みエラー:', error);
         showWaitingScreen();
@@ -140,7 +145,7 @@ async function loadAdminState() {
 }
 
 // admin_state の変更を処理
-function handleAdminState(state) {
+async function handleAdminState(state) {
     // プレゼン中でない、または質問IDがない場合は待機画面
     if (!state || !state.is_presenting || !state.current_question_id) {
         currentQuestion = null;
@@ -164,13 +169,25 @@ function handleAdminState(state) {
     startStalenessCheck();
 
     const newQuestionId = state.current_question_id;
-    const question = questions.find(q => q.id === newQuestionId);
+    let question = questions.find(q => q.id === newQuestionId);
+
+    if (!question && refetchedQuestionId !== newQuestionId) {
+        // ページを開いた後に追加された設問の可能性があるので取り直す。
+        // 同じIDで何度も取りに行かないようガードする
+        refetchedQuestionId = newQuestionId;
+        console.log('未知の質問IDのため質問を再取得します:', newQuestionId);
+        await loadQuestions({ silent: true });
+        question = questions.find(q => q.id === newQuestionId);
+    }
 
     if (!question) {
-        // 質問が見つからない（削除された可能性）
+        // 取り直しても見つからない（削除された可能性）
         showWaitingScreen();
         return;
     }
+
+    // 解決できたのでガードを解除（別の設問を挟んで戻ってきたときに再試行できる）
+    refetchedQuestionId = null;
 
     // 同じ質問の場合は何もしない
     if (currentQuestion && currentQuestion.id === newQuestionId) {
@@ -259,9 +276,9 @@ function startRealtimeSubscription() {
                 table: 'admin_state',
                 filter: `event_id=eq.${eventId}`
             },
-            (payload) => {
+            async (payload) => {
                 console.log('admin_state変更:', payload);
-                handleAdminState(payload.new);
+                await handleAdminState(payload.new);
             }
         )
         .subscribe((status) => {
