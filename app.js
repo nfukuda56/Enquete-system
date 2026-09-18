@@ -8,7 +8,7 @@ let eventId = null;     // DB上の整数ID（内部クエリ用）
 let eventInfo = null;
 let realtimeChannel = null;
 let hasAnsweredCurrentQuestion = false;  // 現在の質問に回答済みかどうか
-let refetchedQuestionId = null;  // 再取得を試みた質問ID（同じIDで繰り返さないためのガード）
+let adminStateSeq = 0;  // handleAdminState の世代番号（再取得中の追い越し検出用）
 
 // 投稿制御
 let policyAgreedAt = null;  // ポリシー同意日時
@@ -146,6 +146,10 @@ async function loadAdminState() {
 
 // admin_state の変更を処理
 async function handleAdminState(state) {
+    // この呼び出しの世代番号。再取得を待っている間に次の admin_state を
+    // 処理していたら、古い呼び出しは描画せずに降りる
+    const seq = ++adminStateSeq;
+
     // プレゼン中でない、または質問IDがない場合は待機画面
     if (!state || !state.is_presenting || !state.current_question_id) {
         currentQuestion = null;
@@ -171,23 +175,30 @@ async function handleAdminState(state) {
     const newQuestionId = state.current_question_id;
     let question = questions.find(q => q.id === newQuestionId);
 
-    if (!question && refetchedQuestionId !== newQuestionId) {
-        // ページを開いた後に追加された設問の可能性があるので取り直す。
-        // 同じIDで何度も取りに行かないようガードする
-        refetchedQuestionId = newQuestionId;
+    if (!question) {
+        // ページを開いた後に追加された設問や、is_active を後から戻した設問の
+        // 可能性があるので取り直す
         console.log('未知の質問IDのため質問を再取得します:', newQuestionId);
         await loadQuestions({ silent: true });
+
+        // 再取得中に次の admin_state を処理していたら、この呼び出しは描画しない
+        if (seq !== adminStateSeq) {
+            console.log('後続の admin_state に追い越されたため中断します:', newQuestionId);
+            return;
+        }
+
         question = questions.find(q => q.id === newQuestionId);
     }
 
     if (!question) {
-        // 取り直しても見つからない（削除された可能性）
+        // 取り直しても見つからない（削除された、または非公開の可能性）
+        // 他の待機分岐と同じ後始末をしないと、同じ設問に戻したときに
+        // 下の同一判定で早期 return して待機画面のまま固定される
+        currentQuestion = null;
+        hasAnsweredCurrentQuestion = false;
         showWaitingScreen();
         return;
     }
-
-    // 解決できたのでガードを解除（別の設問を挟んで戻ってきたときに再試行できる）
-    refetchedQuestionId = null;
 
     // 同じ質問の場合は何もしない
     if (currentQuestion && currentQuestion.id === newQuestionId) {
