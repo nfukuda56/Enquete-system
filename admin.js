@@ -1411,6 +1411,11 @@ function initTextResponseDnd(questionId) {
     let dragged = null;
 
     grid.querySelectorAll('.text-response-card').forEach(card => {
+        // クリックで拡大表示（「非表示」ボタンは除く。ドラッグ後はブラウザがclickを発火しない）
+        card.addEventListener('click', (e) => {
+            if (e.target.closest('.btn-block-response')) return;
+            openTextModal(card.querySelector('.text-response-content').textContent);
+        });
         card.addEventListener('dragstart', (e) => {
             dragged = card;
             card.classList.add('dragging');
@@ -1461,6 +1466,24 @@ function persistTextOrder(questionId) {
         .map(card => card.dataset.responseId);
     saveTextOrder(questionId, ids);
 }
+
+// テキスト回答拡大モーダル（改行は CSS の pre-wrap でそのまま表示）
+function openTextModal(text) {
+    document.getElementById('text-modal-body').textContent = text;
+    document.getElementById('text-modal').classList.add('active');
+}
+
+// 引数なし（×ボタン・Esc）は常に閉じる。オーバーレイのクリックは本文外のときのみ閉じる
+function closeTextModal(event) {
+    const modal = document.getElementById('text-modal');
+    if (!event || event.target === modal) {
+        modal.classList.remove('active');
+    }
+}
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeTextModal();
+});
 
 // 画像拡大モーダル
 function openImageModal(src) {

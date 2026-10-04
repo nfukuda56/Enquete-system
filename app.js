@@ -487,7 +487,7 @@ function generateMultipleChoiceHTML(question) {
 // 自由記述
 function generateTextInputHTML(question) {
     return `
-        <textarea name="answer" rows="4" placeholder="ご意見・ご感想をお書きください"></textarea>
+        <textarea name="answer" rows="4" placeholder="ご意見・ご感想をお書きください（改行できます）"></textarea>
     `;
 }
 

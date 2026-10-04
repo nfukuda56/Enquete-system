@@ -654,6 +654,57 @@ header h1 {
     word-break: break-word;
 }
 
+/* 自由記述回答の拡大モーダル */
+.text-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.6);
+    z-index: 1000;
+    justify-content: center;
+    align-items: center;
+    padding: 2rem;
+}
+
+.text-modal-overlay.active {
+    display: flex;
+}
+
+.text-modal-content {
+    position: relative;
+    width: min(1000px, 100%);
+    max-height: 100%;
+    overflow-y: auto;
+    background: white;
+    padding: 3rem;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+}
+
+.text-modal-body {
+    /* 投影時に会場の後方からも読める大きさ */
+    font-size: 2.5rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.text-modal-close {
+    position: absolute;
+    top: 0.5rem;
+    right: 1rem;
+    background: none;
+    border: none;
+    font-size: 2.5rem;
+    line-height: 1;
+    color: var(--text-secondary);
+    cursor: pointer;
+}
+
+.text-modal-close:hover {
+    color: var(--text-color);
+}
+
 .text-response-card .btn-block-response {
     align-self: flex-end;
     margin-left: 0;
@@ -1642,7 +1693,7 @@ header .event-name {
 
 .admin-layout {
     display: grid;
-    grid-template-columns: 10% 90%;
+    grid-template-columns: clamp(180px, 14%, 260px) 1fr;
     grid-template-rows: 1fr;
     grid-template-areas: "sidebar main";
     height: 100vh;
@@ -1688,7 +1739,7 @@ header .event-name {
 
 .sidebar-logo {
     text-align: center;
-    padding: 1rem 0;
+    padding: 0.5rem 0;
     border-bottom: 1px solid rgba(255,255,255,0.2);
 }
 
@@ -1699,7 +1750,7 @@ header .event-name {
 }
 
 .sidebar-stats {
-    padding: 1rem 0;
+    padding: 0.5rem 0;
     text-align: center;
 }
 
@@ -1769,7 +1820,7 @@ header .event-name {
     background: transparent;
     border: 1px solid rgba(255,255,255,0.3);
     color: white;
-    padding: 0.75rem 0.5rem;
+    padding: 0.5rem;
     border-radius: 4px;
     cursor: pointer;
     transition: background 0.2s;
@@ -1793,13 +1844,24 @@ header .event-name {
 }
 
 .sidebar-qr {
+    /* 幅に連動して縦に伸びないよう、画面の高さに応じて上限を設ける */
+    width: min(100%, 18vh);
+    align-self: center;
+    flex-shrink: 0;
+    box-sizing: border-box;
     padding: 0.5rem;
     background: white;
     border-radius: 4px;
     margin: 0.5rem 0;
 }
 
-.sidebar-qr canvas {
+.sidebar-qr:empty {
+    display: none;
+}
+
+.sidebar-qr canvas,
+.sidebar-qr img {
+    display: block;
     width: 100% !important;
     height: auto !important;
 }
@@ -1913,6 +1975,26 @@ header .event-name {
 }
 
 /* SPA レスポンシブ対応 */
+/* 高さの低い画面ではサイドバーを詰めてスクロールバーを出さない */
+@media (max-height: 760px) {
+    .sidebar {
+        padding-top: 0.5rem;
+        padding-bottom: 0.5rem;
+    }
+    .sidebar-nav, .sidebar-nav-bottom {
+        gap: 0.35rem;
+    }
+    .sidebar-qr {
+        width: min(100%, 15vh);
+    }
+    .sidebar-logo img {
+        max-height: 44px;
+    }
+    .sidebar-stats .stat-value {
+        font-size: 1.5rem;
+    }
+}
+
 @media (max-width: 768px) {
     .admin-layout {
         grid-template-columns: 1fr;
