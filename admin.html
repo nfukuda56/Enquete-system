@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>管理画面 - 伝心くん</title>
     <link rel="icon" type="image/png" href="densin_favi.png">
-    <link rel="stylesheet" href="style.css?v=2.3.0">
+    <link rel="stylesheet" href="style.css?v=2.4.1">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
@@ -233,6 +233,14 @@
         </div>
     </div>
 
+    <!-- 自由記述回答の拡大モーダル -->
+    <div class="text-modal-overlay" id="text-modal" onclick="closeTextModal(event)">
+        <div class="text-modal-content" role="dialog" aria-modal="true" aria-label="回答の拡大表示">
+            <button type="button" class="text-modal-close" onclick="closeTextModal()" aria-label="閉じる">&times;</button>
+            <div class="text-modal-body" id="text-modal-body"></div>
+        </div>
+    </div>
+
     <!-- 新規イベント作成モーダル -->
     <div id="add-event-modal" class="modal" style="display: none;">
         <div class="modal-content">
@@ -324,6 +332,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="config.js?v=2.3.0"></script>
-    <script src="admin.js?v=2.3.0"></script>
+    <script src="admin.js?v=2.4.1"></script>
 </body>
 </html>
