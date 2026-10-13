@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>質問トリガー</title>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <script src="config.js?v=2.1.0"></script>
+    <script src="config.js?v=2.5.0"></script>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -22,13 +22,23 @@
             border-radius: 12px;
             background: white;
             box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            max-width: 400px;
+            max-width: 480px;
         }
         .status.success { border-left: 4px solid #27ae60; }
         .status.error { border-left: 4px solid #e74c3c; }
         .status.processing { border-left: 4px solid #3498db; }
         .status h2 { margin: 0 0 0.5rem; font-size: 1.2rem; }
         .status p { margin: 0; color: #666; font-size: 0.9rem; }
+        .status code {
+            display: block;
+            margin-top: 0.75rem;
+            padding: 0.5rem;
+            background: #f5f5f5;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            text-align: left;
+            word-break: break-all;
+        }
     </style>
 </head>
 <body>
@@ -41,9 +51,11 @@
         (async () => {
             const statusEl = document.getElementById('status');
 
-            function showResult(type, title, message) {
+            function showResult(type, title, message, detail) {
                 statusEl.className = 'status ' + type;
-                statusEl.innerHTML = '<h2>' + title + '</h2><p>' + message + '</p>';
+                let html = '<h2>' + title + '</h2><p>' + message + '</p>';
+                if (detail) html += '<code>' + detail + '</code>';
+                statusEl.innerHTML = html;
                 // 成功時は自動でタブを閉じる（外部アプリから開かれた場合に有効）
                 if (type === 'success') {
                     setTimeout(() => { window.close(); }, 500);
@@ -52,88 +64,77 @@
 
             try {
                 const params = new URLSearchParams(window.location.search);
-                const eventId = parseInt(params.get('event'));
-                const qNumber = parseInt(params.get('q'));
+                const token = params.get('t');
+                const qidParam = params.get('qid');
+                const qParam = params.get('q');
 
-                if (!eventId || isNaN(qNumber)) {
-                    showResult('error', 'パラメータエラー', 'event と q パラメータが必要です');
-                    return;
-                }
-
-                // q=0: プレゼン終了
-                if (qNumber === 0) {
-                    const { data: existing } = await supabaseClient
-                        .from('admin_state')
-                        .select('id')
-                        .eq('event_id', eventId)
-                        .maybeSingle();
-
-                    if (existing) {
-                        await supabaseClient
-                            .from('admin_state')
-                            .update({
-                                current_question_id: null,
-                                is_presenting: false,
-                                updated_at: new Date().toISOString()
-                            })
-                            .eq('event_id', eventId);
+                // 旧形式（?event=1&q=3）は認証済みセッションを必要とし、
+                // 条件を満たさないと無言で失敗していたため廃止した
+                if (!token) {
+                    if (params.get('event')) {
+                        showResult('error', 'URL形式が変わりました',
+                            '操作トークンが必要です。event= の代わりに t= を指定してください。',
+                            'trigger.html?t=&lt;操作トークン&gt;&amp;qid=&lt;設問ID&gt;');
+                    } else {
+                        showResult('error', 'パラメータエラー',
+                            't（操作トークン）と qid（設問ID）が必要です。',
+                            'trigger.html?t=&lt;操作トークン&gt;&amp;qid=&lt;設問ID&gt;');
                     }
-
-                    showResult('success', 'プレゼン終了', '待機画面に戻しました');
                     return;
                 }
 
-                // 質問一覧を取得（sort_order順）
-                const { data: questions, error: qError } = await supabaseClient
-                    .from('questions')
-                    .select('id, question_text')
-                    .eq('event_id', eventId)
-                    .eq('is_active', true)
-                    .order('sort_order', { ascending: true });
-
-                if (qError) throw qError;
-
-                if (!questions || questions.length === 0) {
-                    showResult('error', 'エラー', '質問が見つかりません');
+                if (qidParam === null && qParam === null) {
+                    showResult('error', 'パラメータエラー',
+                        'qid（設問ID）または q（表示順）が必要です。');
                     return;
                 }
 
-                if (qNumber < 1 || qNumber > questions.length) {
-                    showResult('error', '範囲外', 'q=' + qNumber + ' は無効です（1〜' + questions.length + '）');
-                    return;
-                }
-
-                const targetQuestion = questions[qNumber - 1];
-
-                // admin_state を upsert
-                const { data: existing } = await supabaseClient
-                    .from('admin_state')
-                    .select('id')
-                    .eq('event_id', eventId)
-                    .maybeSingle();
-
-                const stateData = {
-                    current_question_id: targetQuestion.id,
-                    is_presenting: true,
-                    updated_at: new Date().toISOString()
-                };
-
-                if (existing) {
-                    const { error } = await supabaseClient
-                        .from('admin_state')
-                        .update(stateData)
-                        .eq('event_id', eventId);
-                    if (error) throw error;
+                // qid（設問ID指定）を優先。q は表示順指定の互換用
+                let result, error;
+                if (qidParam !== null) {
+                    const qid = parseInt(qidParam, 10);
+                    if (isNaN(qid)) {
+                        showResult('error', 'パラメータエラー', 'qid は整数で指定してください。');
+                        return;
+                    }
+                    ({ data: result, error } = await supabaseClient.rpc('set_current_question', {
+                        p_control_token: token,
+                        p_question_id: qid
+                    }));
                 } else {
-                    const { error } = await supabaseClient
-                        .from('admin_state')
-                        .insert([{ event_id: eventId, ...stateData }]);
-                    if (error) throw error;
+                    const order = parseInt(qParam, 10);
+                    if (isNaN(order)) {
+                        showResult('error', 'パラメータエラー', 'q は整数で指定してください。');
+                        return;
+                    }
+                    ({ data: result, error } = await supabaseClient.rpc('set_current_question_by_order', {
+                        p_control_token: token,
+                        p_order: order
+                    }));
                 }
 
-                showResult('success',
-                    'Q' + qNumber + ' を表示',
-                    targetQuestion.question_text);
+                if (error) {
+                    showResult('error', '通信エラー', error.message);
+                    return;
+                }
+
+                // 関数が成否を返すので、無言の失敗にはならない
+                if (!result || result.ok !== true) {
+                    const reason = {
+                        invalid_token: '操作トークンが正しくないか、イベントが無効です。',
+                        question_not_found: '指定された設問が見つかりません（別イベントの設問、または無効化されています）。',
+                        order_out_of_range: '指定された表示順の設問がありません。'
+                    }[result?.error] || ('不明なエラー: ' + JSON.stringify(result));
+                    showResult('error', '切り替えに失敗しました', reason);
+                    return;
+                }
+
+                if (result.question_id === null) {
+                    showResult('success', 'プレゼン終了', '待機画面に戻しました');
+                } else {
+                    showResult('success', '設問を切り替えました',
+                        '設問ID ' + result.question_id + ' を配信中');
+                }
 
             } catch (err) {
                 console.error(err);

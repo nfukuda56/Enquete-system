@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>伝心くん 結果埋め込み</title>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
+    <script src="config.js?v=2.5.0"></script>
+    <style>
+        /* 投影専用。スライドに溶け込むよう背景は透過 */
+        :root {
+            --text: #1F2937;
+            --muted: #6B7280;
+            --border: #E5E7EB;
+            --card: #FFFFFF;
+            --unprocessed: #FEFCE8;
+            --unprocessed-border: #FDE68A;
+        }
+        * { box-sizing: border-box; }
+        html, body {
+            margin: 0;
+            height: 100%;
+            background: transparent;
+            font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+            color: var(--text);
+            overflow: hidden;
+        }
+        #root {
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            padding: 8px;
+        }
+
+        /* --- グラフ --- */
+        .chart-wrap { flex: 1; min-height: 0; display: flex; gap: 24px; }
+        .chart-main { flex: 2; min-width: 0; position: relative; }
+        .chart-side { flex: 1; min-width: 0; display: flex; flex-direction: column;
+                      justify-content: center; gap: 10px; overflow-y: auto; }
+        .chart-wrap.bar { flex-direction: column; }
+        .chart-wrap.bar .chart-main { flex: 1; }
+        .chart-wrap.bar .chart-side { flex: 0 0 auto; display: none; }
+
+        .stat-row { display: flex; align-items: center; gap: 10px; font-size: 1.1rem; }
+        .stat-label { flex: 0 0 34%; text-align: right; overflow: hidden;
+                      text-overflow: ellipsis; white-space: nowrap; }
+        .stat-bar-bg { flex: 1; height: 14px; background: rgba(0,0,0,.08); border-radius: 7px; }
+        .stat-bar { height: 100%; background: #4F46E5; border-radius: 7px; }
+        .stat-value { flex: 0 0 auto; color: var(--muted); font-size: .95rem; white-space: nowrap; }
+
+        /* --- 自由記述カード --- */
+        .cards {
+            flex: 1; min-height: 0; overflow-y: auto;
+            display: grid;
+            /* 横並び枚数は cols パラメータで決まる（既定4枚） */
+            grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+            align-content: start;
+            gap: 14px;
+        }
+        .card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+            font-size: 1.35rem;
+            line-height: 1.5;
+            white-space: pre-wrap;
+            word-break: break-word;
+            transition: background .3s;
+        }
+        /* モデレーション未処理（moderation_timestamp が null）は薄黄色 */
+        .card.unprocessed {
+            background: var(--unprocessed);
+            border-color: var(--unprocessed-border);
+        }
+
+        /* --- 画像タイル --- */
+        .tiles {
+            flex: 1; min-height: 0; overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+            align-content: start;
+            gap: 12px;
+        }
+        .tiles img {
+            width: 100%; aspect-ratio: 1; object-fit: cover;
+            border-radius: 10px; background: rgba(0,0,0,.05);
+        }
+
+        /* --- 通知 --- */
+        .notice {
+            flex: 1; display: flex; align-items: center; justify-content: center;
+            text-align: center; color: var(--muted); font-size: 1.2rem; padding: 20px;
+        }
+        .warn {
+            position: fixed; top: 8px; right: 8px;
+            background: #FEE2E2; border: 1px solid #FCA5A5; color: #991B1B;
+            padding: 6px 12px; border-radius: 6px; font-size: .85rem; z-index: 10;
+        }
+    </style>
+</head>
+<body>
+<div id="root"><div class="notice">読み込み中...</div></div>
+
+<script>
+// ============================================================
+// 伝心くん スライド埋め込み用 結果表示
+//
+// パラメータ:
+//   qid   必須  表示する設問ID。0 なら配信終了のみ行い何も表示しない
+//   t     任意  操作トークン。指定すると current_question_id を qid に切り替える
+//   drive 任意  t があっても切り替えたくない場合に drive=0
+//   cols  任意  カード／タイルの横並び枚数（既定 4）
+//
+// 集計ロジックは admin.js の calculateStats() と対になっている。
+// 片方だけ直すと管理画面と投影画面で数字が食い違うので、必ず両方直すこと。
+// ============================================================
+
+const params   = new URLSearchParams(location.search);
+const QID      = parseInt(params.get('qid'), 10);
+const TOKEN    = params.get('t');
+const DRIVE    = TOKEN && params.get('drive') !== '0';
+const COLS     = Math.max(1, parseInt(params.get('cols') || '4', 10) || 4);
+
+const root = document.getElementById('root');
+let question = null;
+let eventInfo = null;
+let responses = [];
+let eventQuestionIds = new Set();  // このイベントの設問ID。他イベントの回答を弾くのに使う
+let chart = null;
+
+function notice(text) {
+    root.innerHTML = `<div class="notice">${escapeHtml(text)}</div>`;
+}
+
+function warn(text) {
+    const el = document.createElement('div');
+    el.className = 'warn';
+    el.textContent = text;
+    document.body.appendChild(el);
+}
+
+function escapeHtml(s) {
+    const div = document.createElement('div');
+    div.textContent = s == null ? '' : String(s);
+    return div.innerHTML;
+}
+
+// ---------- 設問切り替え ----------
+async function driveQuestion() {
+    if (!DRIVE) return;
+    try {
+        const { data, error } = await supabaseClient.rpc('set_current_question', {
+            p_control_token: TOKEN,
+            p_question_id: isNaN(QID) ? 0 : QID
+        });
+        if (error) { warn('切替失敗: ' + error.message); return; }
+        if (!data || data.ok !== true) {
+            const reason = {
+                invalid_token: '操作トークンが不正',
+                question_not_found: '設問が見つからない'
+            }[data?.error] || ('不明なエラー: ' + JSON.stringify(data));
+            warn('切替失敗: ' + reason);
+        }
+    } catch (e) {
+        warn('切替失敗: ' + e.message);
+    }
+}
+
+// ---------- データ読み込み ----------
+async function loadAll() {
+    // 設問（anon でも公開イベントの設問は読める）
+    const { data: q, error: qErr } = await supabaseClient
+        .from('questions').select('*').eq('id', QID).maybeSingle();
+    if (qErr) throw new Error('設問の取得に失敗: ' + qErr.message);
+    if (!q) throw new Error('設問が見つかりません (qid=' + QID + ')');
+    question = q;
+
+    const { data: ev, error: evErr } = await supabaseClient
+        .from('events').select('*').eq('id', q.event_id).maybeSingle();
+    if (evErr) throw new Error('イベントの取得に失敗: ' + evErr.message);
+    eventInfo = ev;
+
+    // 回答率は admin.js と同じく「イベント全体のユニークセッション数」で数えるため
+    // イベント全設問の回答を読む
+    const { data: qs } = await supabaseClient
+        .from('questions').select('id').eq('event_id', q.event_id);
+    const ids = (qs || []).map(x => x.id);
+    eventQuestionIds = new Set(ids);
+
+    const { data: rs, error: rErr } = await supabaseClient
+        .from('responses').select('*').in('question_id', ids.length ? ids : [-1])
+        .order('created_at', { ascending: true });
+    if (rErr) throw new Error('回答の取得に失敗: ' + rErr.message);
+    responses = rs || [];
+}
+
+// ---------- 集計（admin.js の calculateStats と対） ----------
+function getRatingLabel(value, options) {
+    const idx = parseInt(value, 10) - 1;
+    if (options && options[idx]) return options[idx];
+    const defaults = { '1': 'とても不満', '2': '不満', '3': '普通', '4': '満足', '5': 'とても満足' };
+    return defaults[value] || value;
+}
+
+function calculateStats(q, qResponses) {
+    const counts = {};
+    if (q.question_type === 'rating') {
+        [1, 2, 3, 4, 5].forEach(v => counts[v] = 0);
+    } else if (q.options) {
+        q.options.forEach(opt => counts[opt] = 0);
+    }
+
+    qResponses.forEach(r => {
+        if (q.question_type === 'multiple') {
+            try {
+                JSON.parse(r.answer).forEach(a => {
+                    if (counts[a] !== undefined) counts[a]++;
+                });
+            } catch {
+                if (counts[r.answer] !== undefined) counts[r.answer]++;
+            }
+        } else {
+            if (counts[r.answer] !== undefined) counts[r.answer]++;
+        }
+    });
+
+    const total = qResponses.length || 1;
+    return Object.entries(counts).map(([label, count]) => ({
+        label: q.question_type === 'rating' ? getRatingLabel(label, q.options) : label,
+        count,
+        percentage: (count / total) * 100
+    }));
+}
+
+// グラフ表示判定（admin.js の calculateShouldShowChart と同じ条件）
+function shouldShowChart() {
+    const expected = eventInfo?.expected_participants || 0;
+    if (expected === 0) return true;
+    const uniqueSessions = new Set(responses.map(r => r.session_id)).size;
+    return (uniqueSessions / expected) * 100 > 30;
+}
+
+// ---------- 描画 ----------
+function render() {
+    const qResponses = responses.filter(r => r.question_id === question.id);
+    const type = question.question_type;
+
+    if (type === 'text') return renderCards(qResponses);
+    if (type === 'image') return renderTiles(qResponses);
+    if (!shouldShowChart()) {
+        return notice('回答率が30%を超えるとグラフが表示されます');
+    }
+    return renderChart(question, qResponses);
+}
+
+function renderCards(qResponses) {
+    // 投影画面なので表示トグル／緊急停止を尊重する
+    if (!eventInfo?.text_display_enabled) {
+        return notice('自由記述の表示はOFFです');
+    }
+    const visible = qResponses.filter(r => r.moderation_status !== 'blocked');
+    if (visible.length === 0) return notice('まだ回答がありません');
+
+    root.innerHTML = `
+        <div class="cards" style="--cols:${COLS}">
+            ${visible.map(r => `
+                <div class="card ${r.moderation_timestamp ? '' : 'unprocessed'}">${escapeHtml(r.answer)}</div>
+            `).join('')}
+        </div>`;
+}
+
+function renderTiles(qResponses) {
+    if (!eventInfo?.image_display_enabled) {
+        return notice('画像投稿の表示はOFFです');
+    }
+    const visible = qResponses.filter(r => r.moderation_status !== 'blocked');
+    if (visible.length === 0) return notice('まだ回答がありません');
+
+    root.innerHTML = `
+        <div class="tiles" style="--cols:${COLS}">
+            ${visible.map(r => `<img src="${escapeHtml(r.answer)}" alt="投稿画像" loading="lazy">`).join('')}
+        </div>`;
+}
+
+function renderChart(q, qResponses) {
+    const stats = calculateStats(q, qResponses);
+    const isBar = q.question_type === 'rating';
+
+    root.innerHTML = `
+        <div class="chart-wrap ${isBar ? 'bar' : ''}">
+            <div class="chart-main"><canvas id="chart"></canvas></div>
+            <div class="chart-side">
+                ${stats.map(s => `
+                    <div class="stat-row">
+                        <span class="stat-label">${escapeHtml(s.label)}</span>
+                        <div class="stat-bar-bg"><div class="stat-bar" style="width:${s.percentage}%"></div></div>
+                        <span class="stat-value">${s.count}件</span>
+                    </div>`).join('')}
+            </div>
+        </div>`;
+
+    const ctx = document.getElementById('chart').getContext('2d');
+    if (chart) chart.destroy();
+
+    if (isBar) {
+        chart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: stats.map(s => s.label),
+                datasets: [{
+                    data: stats.map(s => s.count),
+                    backgroundColor: ['#EF4444', '#F59E0B', '#6B7280', '#10B981', '#4F46E5']
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    x: { ticks: { font: { size: 20 } } },
+                    y: { beginAtZero: true, ticks: { stepSize: 1 } }
+                }
+            }
+        });
+    } else {
+        chart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: stats.map(s => s.label),
+                datasets: [{
+                    data: stats.map(s => s.count),
+                    backgroundColor: ['#4F46E5', '#10B981', '#F59E0B', '#EF4444',
+                                      '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16']
+                }]
+            },
+            plugins: [ChartDataLabels],
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { enabled: false },
+                    datalabels: {
+                        color: '#000',
+                        font: { weight: 'bold', size: 22 },
+                        textAlign: 'center',
+                        formatter: (value, context) => {
+                            if (value === 0) return '';
+                            const label = context.chart.data.labels[context.dataIndex];
+                            const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                            const pct = total > 0 ? ((value / total) * 100).toFixed(0) : 0;
+                            return `${label}\n${pct}%`;
+                        }
+                    }
+                }
+            }
+        });
+    }
+}
+
+// ---------- リアルタイム購読 ----------
+function subscribe() {
+    supabaseClient.channel('embed-' + question.id)
+        .on('postgres_changes',
+            { event: '*', schema: 'public', table: 'responses' },
+            (payload) => {
+                const type = payload.eventType || payload.event;
+
+                // DELETE では payload.new が空オブジェクトなので old を見る
+                if (type === 'DELETE') {
+                    const oldId = payload.old?.id;
+                    if (oldId == null) return;
+                    const idx = responses.findIndex(r => r.id === oldId);
+                    if (idx < 0) return;
+                    responses.splice(idx, 1);
+                    render();
+                    return;
+                }
+
+                const row = payload.new;
+                if (!row || row.id == null) return;
+                // 購読は全テーブル対象なので、他イベントの回答を取り込まない。
+                // 取り込むと回答率（30%判定）が他イベントの回答で汚染される
+                if (!eventQuestionIds.has(row.question_id)) return;
+
+                const idx = responses.findIndex(r => r.id === row.id);
+                if (idx >= 0) {
+                    responses[idx] = row;
+                } else {
+                    responses.push(row);
+                }
+                render();
+            })
+        .on('postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'events', filter: `id=eq.${question.event_id}` },
+            (payload) => {
+                // 緊急停止・表示トグルを即座に反映
+                eventInfo = payload.new;
+                render();
+            })
+        .subscribe();
+}
+
+// ---------- 起動 ----------
+(async () => {
+    if (isNaN(QID)) {
+        notice('qid パラメータが必要です');
+        return;
+    }
+
+    // 切り替えを先に投げる（表示の成否に関わらず参加者へ届けたい）
+    await driveQuestion();
+
+    // qid=0 は配信終了のみ。表示するものはない
+    if (QID === 0) {
+        root.innerHTML = '';
+        return;
+    }
+
+    try {
+        await loadAll();
+        render();
+        subscribe();
+    } catch (e) {
+        console.error(e);
+        // 回線が死んでいる場合もここに来る。スライドを壊さないよう静かに出す
+        notice('結果を取得できませんでした（オフラインの可能性があります）');
+    }
+})();
+</script>
+</body>
+</html>
