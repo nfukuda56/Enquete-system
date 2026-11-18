@@ -8,6 +8,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2"></script>
     <script src="config.js?v=2.5.0"></script>
+    <script src="response-count.js?v=2.6.0"></script>
     <style>
         /* 投影専用。スライドに溶け込むよう背景は透過 */
         :root {
@@ -90,6 +91,44 @@
             border-radius: 10px; background: rgba(0,0,0,.05);
         }
 
+        /* --- 件数バッジ（count=1 のときだけ右上に重ねる） --- */
+        .count-badge {
+            position: fixed; top: 8px; right: 8px; z-index: 5;
+            background: rgba(255,255,255,.92); border: 1px solid var(--border);
+            border-radius: 999px; padding: 4px 14px;
+            font-size: 1rem; font-weight: 600; color: var(--text);
+            box-shadow: 0 1px 3px rgba(0,0,0,.08);
+        }
+
+        /* --- 件数のみモード（view=count） --- */
+        .count-view {
+            flex: 1; min-height: 0;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+            gap: 2.5vh; text-align: center;
+        }
+        .count-title {
+            font-size: min(6vh, 3.2vw); font-weight: 600; line-height: 1.4;
+            max-width: 90%;
+        }
+        .count-number {
+            font-size: min(24vh, 12vw); font-weight: 700; line-height: 1;
+            font-variant-numeric: tabular-nums; color: #4F46E5;
+            transition: transform .25s ease;
+        }
+        .count-number .count-unit { font-size: .4em; font-weight: 600; color: var(--text); }
+        .count-number .count-denom { font-size: .4em; font-weight: 600; color: var(--muted); }
+        .count-number.bump { transform: scale(1.08); }
+        .count-posts { font-size: min(5vh, 2.6vw); color: var(--muted); }
+        .count-bar-bg {
+            width: 70%; height: min(4vh, 22px); background: rgba(0,0,0,.08);
+            border-radius: 999px; overflow: hidden; display: flex;
+        }
+        .count-bar { height: 100%; background: #4F46E5; border-radius: 999px; transition: width .4s ease, background .4s; }
+        .count-rate { font-size: min(5vh, 2.6vw); color: var(--muted); font-variant-numeric: tabular-nums; }
+        .count-view.complete .count-number { color: #059669; }
+        .count-view.complete .count-bar { background: #10B981; }
+        .count-last { font-size: min(4vh, 2.2vw); color: var(--muted); }
+
         /* --- 通知 --- */
         .notice {
             flex: 1; display: flex; align-items: center; justify-content: center;
@@ -99,6 +138,7 @@
             position: fixed; top: 8px; right: 8px;
             background: #FEE2E2; border: 1px solid #FCA5A5; color: #991B1B;
             padding: 6px 12px; border-radius: 6px; font-size: .85rem; z-index: 10;
+            max-width: 60%;
         }
     </style>
 </head>
@@ -114,6 +154,13 @@
 //   t     任意  操作トークン。指定すると current_question_id を qid に切り替える
 //   drive 任意  t があっても切り替えたくない場合に drive=0
 //   cols  任意  カード／タイルの横並び枚数（既定 4）
+//   view  任意  view=count で件数のみ表示（回答内容は出さない）
+//   count 任意  count=1 で結果表示の右上に件数を重ねる（既定は出さない）
+//   hidden 任意 hidden=1 で件数表示に非表示（blocked）件数を添える（既定は出さない）
+//   title 任意  view=count のとき title=0 で設問文を出さない
+//
+// 件数は描画のたびに親ページへ postMessage で送る（denshin-count.js が受け取る）。
+// 件数の数え方は response-count.js にまとめてある（admin.js と共用）。
 //
 // 集計ロジックは admin.js の calculateStats() と対になっている。
 // 片方だけ直すと管理画面と投影画面で数字が食い違うので、必ず両方直すこと。
@@ -124,6 +171,10 @@ const QID      = parseInt(params.get('qid'), 10);
 const TOKEN    = params.get('t');
 const DRIVE    = TOKEN && params.get('drive') !== '0';
 const COLS     = Math.max(1, parseInt(params.get('cols') || '4', 10) || 4);
+const VIEW     = params.get('view') === 'count' ? 'count' : 'result';
+const SHOW_COUNT  = params.get('count') === '1';
+const SHOW_HIDDEN = params.get('hidden') === '1';
+const SHOW_TITLE  = params.get('title') !== '0';
 
 const root = document.getElementById('root');
 let question = null;
@@ -131,6 +182,8 @@ let eventInfo = null;
 let responses = [];
 let eventQuestionIds = new Set();  // このイベントの設問ID。他イベントの回答を弾くのに使う
 let chart = null;
+let lastCounts = null;      // 最後に数えた件数。親ページからの再送要求に使う
+let prevRespondents = null; // 件数のみモードで増えたときに強調するため
 
 function notice(text) {
     root.innerHTML = `<div class="notice">${escapeHtml(text)}</div>`;
@@ -244,9 +297,115 @@ function shouldShowChart() {
     return (uniqueSessions / expected) * 100 > 30;
 }
 
+// ---------- 件数を親ページへ送る ----------
+// 送るのは件数だけ（回答内容は送らない）。スライド側の denshin-count.js が受け取る
+function postCounts(status) {
+    if (window.parent === window) return;
+    const payload = { source: 'denshinkun', type: 'counts', qid: QID, status: status || 'ok' };
+    if (payload.status === 'ok' && lastCounts) {
+        Object.assign(payload, {
+            respondents: lastCounts.respondents,
+            posts: lastCounts.posts,
+            hidden: lastCounts.hidden,
+            expected: eventInfo?.expected_participants || null,
+            mode: lastCounts.mode,
+            questionType: question?.question_type || null,
+            lastAnsweredAt: lastCounts.lastAnsweredAt
+        });
+    }
+    try { window.parent.postMessage(payload, '*'); } catch (e) { /* 親がいなくても表示は続ける */ }
+}
+
+// 親ページの denshin-count.js が後から読み込まれたときの再送要求
+window.addEventListener('message', (e) => {
+    if (e.source !== window.parent) return;
+    const d = e.data;
+    if (!d || d.source !== 'denshinkun' || d.type !== 'requestCounts') return;
+    if (lastCounts) postCounts('ok');
+});
+
+// 「18 / 40人」または「18人」。append は「・27件」、hidden=1 なら「（非表示 2件）」を添える
+function countText(counts) {
+    const expected = eventInfo?.expected_participants || 0;
+    let s = expected > 0 ? `${counts.respondents} / ${expected}人` : `${counts.respondents}人`;
+    if (counts.mode === 'append' && counts.posts !== counts.respondents) s += `・${counts.posts}件`;
+    if (SHOW_HIDDEN && counts.hidden > 0) s += `（非表示 ${counts.hidden}件）`;
+    return s;
+}
+
 // ---------- 描画 ----------
 function render() {
     const qResponses = responses.filter(r => r.question_id === question.id);
+    lastCounts = countResponses(question, qResponses);
+    postCounts('ok');
+
+    if (VIEW === 'count') return renderCountView(lastCounts);
+
+    renderResult(qResponses);
+    if (SHOW_COUNT) renderCountBadge(lastCounts);
+}
+
+function renderCountBadge(counts) {
+    const el = document.createElement('div');
+    el.className = 'count-badge';
+    el.textContent = '回答 ' + countText(counts);
+    root.appendChild(el);
+}
+
+// 件数のみモード。回答内容は出さないので表示トグル（緊急停止）の影響は受けない
+function renderCountView(counts) {
+    const expected = eventInfo?.expected_participants || 0;
+    const rate = expected > 0 ? Math.round((counts.respondents / expected) * 100) : null;
+    const complete = expected > 0 && counts.respondents >= expected;
+    const showPosts = counts.mode === 'append' && counts.posts !== counts.respondents;
+
+    root.innerHTML = `
+        <div class="count-view ${complete ? 'complete' : ''}">
+            ${SHOW_TITLE ? `<div class="count-title">${escapeHtml(question.question_text)}</div>` : ''}
+            <div class="count-number" id="count-number">${counts.respondents}${
+                expected > 0
+                    ? `<span class="count-denom"> / ${expected}</span><span class="count-unit">人</span>`
+                    : `<span class="count-unit">人</span>`
+            }</div>
+            ${showPosts ? `<div class="count-posts">投稿 ${counts.posts}件</div>` : ''}
+            ${SHOW_HIDDEN && counts.hidden > 0 ? `<div class="count-posts">非表示 ${counts.hidden}件</div>` : ''}
+            ${expected > 0 ? `
+                <div class="count-bar-bg"><div class="count-bar" style="width:${Math.min(100, rate)}%"></div></div>
+                <div class="count-rate">${rate}%</div>` : ''}
+            <div class="count-last" id="count-last"></div>
+        </div>`;
+
+    updateLastAnswered();
+
+    // 増えたときだけ数字を軽く強調する（初回描画では動かさない）
+    if (prevRespondents !== null && counts.respondents > prevRespondents) {
+        const num = document.getElementById('count-number');
+        requestAnimationFrame(() => {
+            num.classList.add('bump');
+            setTimeout(() => num.classList.remove('bump'), 250);
+        });
+    }
+    prevRespondents = counts.respondents;
+}
+
+// 「最後の回答：12秒前」。通信はせず手元の時計で更新するだけ
+function updateLastAnswered() {
+    const el = document.getElementById('count-last');
+    if (!el || !lastCounts) return;
+    if (!lastCounts.lastAnsweredAt) {
+        el.textContent = 'まだ回答がありません';
+        return;
+    }
+    const sec = Math.max(0, Math.floor((Date.now() - new Date(lastCounts.lastAnsweredAt).getTime()) / 1000));
+    let ago;
+    if (sec < 5) ago = 'たった今';
+    else if (sec < 60) ago = `${sec}秒前`;
+    else if (sec < 3600) ago = `${Math.floor(sec / 60)}分前`;
+    else ago = '1時間以上前';
+    el.textContent = `最後の回答：${ago}`;
+}
+
+function renderResult(qResponses) {
     const type = question.question_type;
 
     if (type === 'text') return renderCards(qResponses);
@@ -427,8 +586,10 @@ function subscribe() {
         await loadAll();
         render();
         subscribe();
+        if (VIEW === 'count') setInterval(updateLastAnswered, 1000);
     } catch (e) {
         console.error(e);
+        postCounts('error');
         // 回線が死んでいる場合もここに来る。スライドを壊さないよう静かに出す
         notice('結果を取得できませんでした（オフラインの可能性があります）');
     }

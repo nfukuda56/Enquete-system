@@ -25,6 +25,9 @@ Enquete-system/
 ├── admin.js                # 管理ページのロジック
 ├── config.js               # Supabase接続設定
 ├── trigger.html            # PPT連携用トリガーページ
+├── embed.html              # スライド埋め込み用の結果／件数表示（doc/external_integration.md 6章）
+├── response-count.js       # 回答件数の集計（admin.js と embed.html で共用）
+├── denshin-count.js        # スライド側で読み込む件数表示スクリプト
 ├── test-connections.html   # 接続診断ページ
 ├── style.css               # スタイルシート
 ├── doc/                    # ドキュメント
