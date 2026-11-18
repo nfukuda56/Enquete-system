@@ -12,6 +12,7 @@
 | DB側（操作トークンと RPC） | 実装済み。**`sql/slide-control.sql` の適用が必要** | — |
 | PowerPoint 連携（`trigger.html`） | 実装済み。**URL形式が変わった**（旧 `?event=&q=` は廃止） | 5章 |
 | reveal.js / md スライド連携（`embed.html`） | 実装済み | 6章 |
+| 回答件数の表示（`view=count` / `denshin-count.js`） | 実装済み・テスト環境で確認済み | 6章「回答件数の表示」 |
 
 いずれも**実機確認は未実施**。本番投入前に4章の手順で一度通すこと。
 
@@ -154,6 +155,10 @@ reveal.js は HTML なので、`embed.html` を iframe で埋め込むことで*
 | `t` | — | なし | 操作トークン。**渡すと設問切り替えも行う** |
 | `drive` | — | — | `t` を渡しても切り替えたくないとき `drive=0` |
 | `cols` | — | `4` | 自由記述カード／画像タイルの横並び枚数 |
+| `view` | — | 結果表示 | `view=count` で**件数のみ**を表示（回答内容は出さない） |
+| `count` | — | 出さない | `count=1` で結果表示の右上に件数を重ねる |
+| `hidden` | — | 出さない | `hidden=1` で件数表示に非表示（blocked）件数を添える |
+| `title` | — | 出す | `view=count` のとき `title=0` で設問文を出さない |
 
 ### md の書き方
 
@@ -195,6 +200,82 @@ Reveal.initialize({
 - **`t` 付きの iframe を同一スライドに2つ以上置かないこと。** どちらが最後に書くか不定になる
 - 結果を複数設問ぶん並べたい場合は、1つだけに `t` を渡し、残りは `t` なし（または `drive=0`）にする
 
+### 回答件数の表示
+
+進行状況（どれだけ回答が集まったか）を、回答内容を見せずに把握するための機能。
+
+#### 数え方
+
+件数の数え方は `response-count.js` にまとめてあり、admin.html と embed.html が共用している。
+
+| 値 | 意味 |
+|---|---|
+| 回答者数 | `blocked` を除いた回答の `session_id` を重複なしで数えた人数。**主に表示する値** |
+| 投稿数 | `blocked` を除いた行数。`duplicate_mode='append'` の設問で回答者数と差が出る |
+| 非表示件数 | `moderation_status='blocked'` の行数。**既定では表示しない** |
+| 分母 | `events.expected_participants`。未設定なら人数だけを出す |
+
+表示形式は「18 / 40人」（分母あり）または「18人」。`append` の設問で投稿数が回答者数と違うときだけ「18 / 40人・27件」と件数を添える。
+
+#### 件数のみモード（`view=count`）
+
+回答だけ先に集めて、結果の内訳はあとで見せる進め方に使う。設問文・大きな人数・進捗バー・「最後の回答：○秒前」を表示する。
+
+- 参加予定数に達するとバーと数字が緑になる
+- 人数が増えると数字が軽く拡大する
+- 「最後の回答」は iframe 内の時計で更新するだけで通信は増えない。回答が止まったかどうかで締めどきを判断できる
+- 回答内容を出さないので `text_display_enabled` / `image_display_enabled` の影響を受けない
+
+```md
+## 回答受付中
+<!-- 設問を配信し、件数だけ見せる -->
+<iframe data-src="https://nfukuda56.github.io/Enquete-system/embed.html?qid=33&t=TOKEN&view=count"
+        width="100%" height="500" frameborder="0" allowtransparency="true"></iframe>
+
+---
+
+## 皆さんの回答
+<!-- 切り替えずに（drive=0）結果を開く。t は付けない -->
+<iframe data-src="https://nfukuda56.github.io/Enquete-system/embed.html?qid=33&drive=0"
+        width="100%" height="600" frameborder="0" allowtransparency="true"></iframe>
+```
+
+受付スライドで配信したら、結果スライドは `t` なし（または `drive=0`）にする。結果スライドの間も参加者画面は同じ設問のままなので、遅れた回答も受け付けられ、結果にもリアルタイムで反映される。
+
+#### iframe の外（スライドの見出しなど）に件数を出す
+
+iframe の中に件数を入れるとグラフが小さくなるので、件数は**スライド側に出す**のを基本にする。
+
+`embed.html` は描画のたびに（初回・回答の追加・削除・非表示のたびに）件数を親ページへ `postMessage` で送っている。スライドで `denshin-count.js` を読み込み、件数を出したい場所に `data-denshin-count="設問ID"` を付けた要素を置くと、そこに書き込まれる。
+
+```md
+<script src="https://nfukuda56.github.io/Enquete-system/denshin-count.js"></script>
+
+## Q3. 今日いちばん印象に残ったことは？ <span data-denshin-count="33"></span>
+
+<iframe data-src="https://nfukuda56.github.io/Enquete-system/embed.html?qid=33&t=TOKEN"
+        width="100%" height="600" frameborder="0" allowtransparency="true"></iframe>
+```
+
+- **追加の負荷はない。** 件数は iframe がすでに読み込んでいる回答から数えるもので、Supabase への問い合わせも Realtime の接続も増えない。スライド側は Supabase に接続しない
+- グラフ・カードと件数は同じ描画で更新されるので、数字と表示がずれない
+- `<script>` はスライドのどこか1か所にあればよい（`preloadIframes: false` を設定する script と同じ場所が扱いやすい）
+- 要素側の指定
+
+  | 属性 | 意味 |
+  |---|---|
+  | `data-denshin-count="33"` | どの設問の件数か（必須） |
+  | `data-denshin-field` | `summary`（既定・「18 / 40人」）/ `respondents` / `posts` / `hidden` / `expected` / `rate`（「45%」） |
+  | `data-denshin-hidden="1"` | `summary` に「（非表示 2件）」を添える |
+
+- 書き込んだ要素には `data-denshin-state="ok"|"error"` が付き、参加予定数に達すると `data-denshin-complete` が付く。CSS で色を変えたいときに使う（例：`[data-denshin-complete] { color: #059669; }`）
+- 独自に表示したいときは `document.addEventListener('denshin:counts', e => ...)` で `e.detail`（`qid` / `respondents` / `posts` / `hidden` / `expected` / `mode` / `lastAnsweredAt`）を受け取れる
+- **件数が更新されるのは、その設問の iframe が読み込まれている間だけ。** reveal.js は `data-src` の iframe をスライドを離れると破棄するので、それ以降は最後の数字が残る
+- 回線が切れて iframe が読み込みに失敗したときは、数字は最後の値のまま `data-denshin-state="error"` になる
+- 受け付けるのは同じページ内の iframe からのメッセージだけ。送られるのは件数だけで、回答内容や操作トークンは含まない
+
+iframe 内に重ねたいときは `count=1`（右上に「回答 18 / 40人」）。管理画面の結果ツールバーの「回答 ○人」も同じ数え方で、非表示件数はモデレーション統計（🚫 ブロック）に出ている。
+
 ### 表示される内容
 
 `embed.html` は投影専用なので、admin.html とは出すものが違う。
@@ -208,6 +289,7 @@ Reveal.initialize({
 | モデレーション統計チップ | ○ | **✕**（講師は裏の admin.html で見る） |
 | `text_display_enabled` の尊重 | ✕（常時表示） | **○** |
 | `image_display_enabled` の尊重 | ✕（常時表示） | **○** |
+| 回答件数 | ○（ツールバー「回答 ○人」） | `count=1` で右上に重ねる／`view=count` で件数のみ／親ページへ常時送信 |
 
 最後の2行が重要。**`embed.html` は表示トグルと緊急停止を尊重する。** 投影画面なので安全弁が必要。緊急停止を押すと投影からは消え、admin.html では見え続ける（講師は中身を確認できる）。切り替えは Realtime で即座に反映される。
 

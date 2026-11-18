@@ -1170,7 +1170,9 @@ async function nextResult() {
 
 // 結果カード生成
 function generateResultCard(question, questionResponses, index, totalQuestions, shouldShowChart = true) {
-    const responseCount = questionResponses.length;
+    // 件数は response-count.js で数える（embed.html と同じ数え方）。
+    // 非表示（blocked）件数はモデレーション統計のツールバーに出ているのでここでは出さない
+    const counts = countResponses(question, questionResponses);
 
     let contentHTML = '';
     if (question.question_type === 'text') {
@@ -1221,7 +1223,7 @@ function generateResultCard(question, questionResponses, index, totalQuestions, 
                 <span class="question-number">Q${index + 1}</span>
                 <span class="question-text-large">${escapeHtml(question.question_text)}</span>
                 <span class="toolbar-spacer"></span>
-                <span class="result-response-count">${responseCount}件の回答</span>
+                <span class="result-response-count" title="回答者数（非表示を除く）">回答 ${formatRespondents(counts)}</span>
                 <button class="btn btn-secondary result-nav-btn" onclick="nextResult()" ${nextDisabled}>
                     次の質問 →
                 </button>

@@ -1,5 +1,5 @@
 ---
-name: denshinkun-enquete
+name: "denshinkun-enquete"
 description: "伝心くん（Enquete-system）の回答読み出し・設問の追加/編集・配信操作、スライド連携（reveal.js / PowerPoint）を行うとき。「伝心くん」「でんしんくん」「アンケート設問」「参加者の回答を読んで」「スライドにアンケートを埋める」「操作トークン」等で使用。"
 ---
 
@@ -64,7 +64,7 @@ description: "伝心くん（Enquete-system）の回答読み出し・設問の�
 
 - `public_token`（参加者URL用）とは**別の値**。混同しないこと
 - **anon からはテーブル権限ごと遮断してある**（RLS だけでなく GRANT も剥がしてある）。意図的な設定なので「開放されていない」ことを問題として報告したり、開けたりしない
-- イベント作成時にトリガで自動発行される
+- イベント作成時にトリガ（`trg_issue_event_control_token`）で自動発行される
 - 取得は MCP 経由の SQL のみ（下記）
 
 ```sql
@@ -110,7 +110,7 @@ returning id;
 - `sort_order` は既存の最大値+1 を基本に。途中に差し込むときは既存を空けるか小数を避けて振り直す。
 - **会期中の追加はそのまま使える。** 参加者が画面を開いたあとに追加した設問も、講師が配信に切り替えた時点で各端末が自動で取り直す（リロード不要）。
 - **`is_active=false` の設問を配信すると参加者は待機画面になる**（「映さない設問」として意図的に使える）。あとから `true` に戻せば、次の `admin_state` 更新（ハートビートは30秒間隔）で自動復帰する。
-- 設問IDを使うスライドリンクがある場合、**`sort_order` の変更は表示順指定（`q=`）のリンクを壊す。** ID指定（`qid=`）なら影響しない。
+- 設問IDを使うスライドリンクがある場合、**`sort_order` の変更や設問の `is_active` 切り替えは表示順指定（`q=`）のリンクを壊す。** 表示順は「有効な設問だけを `sort_order, id` で並べた何番目か」で数えるため。ID指定（`qid=`）なら影響しない。
 
 ## 配信操作（admin_state）
 
@@ -126,7 +126,7 @@ returning id;
 
 ```sql
 select set_current_question(:control_token, :question_id);  -- question_id = 0 で配信終了
-select set_current_question_by_order(:control_token, :order); -- 表示順（1始まり）、0 で配信終了
+select set_current_question_by_order(:control_token, :order); -- 表示順（1始まり、有効な設問のみで数える）、0 で配信終了
 select touch_admin_state(:control_token);                    -- ハートビートのみ（通常は不要）
 ```
 
@@ -138,7 +138,9 @@ select touch_admin_state(:control_token);                    -- ハートビー�
 ```
 
 - イベントを跨いだ操作はできない（トークンに紐づくイベントの設問のみ）
+- **イベント自体が `is_active=false` だとトークンが正しくても `invalid_token` になる。** トークンを疑う前にイベントの `is_active` を確認する
 - `is_active=false` の設問は `question_not_found` になる
+- 配信終了（0）は `current_question_id` を NULL にする
 - **配信の主役は講師の管理画面**。このスキルが切り替えるのはユーザーが明示的に頼んだときだけで、**作業前の `current_question_id` / `is_presenting` を記録し、終わったら戻す**
 - RPC では「`current_question_id` を保持したまま `is_presenting=false`」は作れない。元の状態に厳密に戻す必要があるときは管理画面から操作してもらう
 
@@ -151,10 +153,39 @@ select touch_admin_state(:control_token);                    -- ハートビー�
 - **reveal.js**：該当スライドに `iframe` を1つ置く。`src` ではなく **`data-src`**
   ```html
   <iframe data-src="https://nfukuda56.github.io/Enquete-system/embed.html?qid=33&t=TOKEN"
-          width="1600" height="700" frameborder="0" allowtransparency="true"></iframe>
+          width="100%" height="600" frameborder="0" allowtransparency="true"></iframe>
   ```
-- **`Reveal.initialize({ preloadIframes: false })` を必ず明示する。** `true` だと隣接スライドが先読みされ、まだ映していない設問が参加者に配信される
+- **サイズはスライド（960×700）に合わせる。** 仕様書の例 `width="1600" height="700"` は 960 幅のスライドに入らない
+
+  | 置き方 | width | height |
+  |---|---|---|
+  | 選択式：左に選択肢・右に結果（1:2 の右列） | 100% | 500 |
+  | 自由記述：見出し帯に設問＋下を全面 | 100% | 600 |
+  | 見出し帯＋設問1行＋結果 | 100% | 480 |
+
+- **`preloadIframes: false` を必ず効かせる。** `true` だと隣接スライドが先読みされ、まだ映していない設問が参加者に配信される。素の reveal.js なら `Reveal.initialize({ preloadIframes: false })`。vscode-reveal は front matter で渡せないので、読み込み時に `Reveal.configure({ preloadIframes: false })` を呼ぶ script を置く（`reveal-seminar-slides` スキルの template に入っている）
 - `t` を渡すと設問切り替えも行う。**`t` 付きの iframe を同一スライドに2つ置かない**
+- `embed.html` のパラメータ
+
+  | パラメータ | 意味 |
+  |---|---|
+  | `qid` | 設問ID。`0` は配信終了だけ行い何も表示しない（止めたいスライドに `width="1" height="1"` で置く） |
+  | `t` | 操作トークン。付けると設問を切り替える |
+  | `drive=0` | `t` を付けても切り替えない（結果の見せ直し・前後比較用） |
+  | `cols` | 自由記述カードの列数（既定 4） |
+  | `view=count` | 件数のみ表示（回答内容は出さない）。回答だけ先に集めて結果はあとで出すときに使う |
+  | `count=1` | 結果表示の右上に件数を重ねる（既定は出さない） |
+  | `hidden=1` | 件数表示に非表示（blocked）件数を添える（既定は出さない） |
+  | `title=0` | `view=count` で設問文を出さない |
+
+- **回答件数はスライド側に出すのが基本。** iframe 内に入れるとグラフが小さくなるため。スライドで `denshin-count.js` を1回読み込み、`<span data-denshin-count="33"></span>` を見出しなどに置くと「18 / 40人」が入る。`embed.html` が件数を `postMessage` で送っているだけなので負荷は増えない。詳細は `doc/external_integration.md` 6章「回答件数の表示」
+  ```html
+  <script src="https://nfukuda56.github.io/Enquete-system/denshin-count.js"></script>
+  ```
+- 件数の数え方（`response-count.js`。admin.html と共用）：回答者数＝`blocked` を除いた `session_id` の重複なし人数、投稿数＝`blocked` を除いた行数（`append` でだけ「・27件」と併記）、非表示件数は既定で出さない。分母は `expected_participants`
+- 受付スライドを `view=count` + `t` にしたら、結果スライドは `drive=0`（`t` なし）にする
+
+- スライド側の型（2列の組み方、設問文の長さ、本番前の確認）は `reveal-seminar-slides` スキルにある
 - スライドはどこに置いてもよい（ローカルファイルでも動く）。ログインも同一オリジンも不要
 - `embed.html` は投影専用。操作ボタンを出さず、`text_display_enabled` / `image_display_enabled`（緊急停止）を尊重する
 - **PowerPoint**：`trigger.html?t=TOKEN&qid=33`。旧形式 `?event=1&q=3` は廃止済みで動かない
