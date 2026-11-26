@@ -243,6 +243,10 @@ function stopStalenessCheck() {
 // ユーザーが入力中かどうかチェック
 function checkUserInput() {
     if (!currentQuestion) return false;
+    // 送信（またはスキップ）済みなら入力中ではない。
+    // 送信後も質問エリアの選択状態は DOM に残るため、これがないと
+    // 「入力中」と誤判定して次の設問への切り替えを保留し、送信済み画面のまま止まる
+    if (hasAnsweredCurrentQuestion) return false;
 
     const inputs = document.querySelectorAll('[name="answer"]');
 
