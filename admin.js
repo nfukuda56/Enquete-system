@@ -2150,6 +2150,14 @@ async function loadAdminState() {
             isPresenting = false;
         }
 
+        // スライド（embed.html / trigger.html）から配信が始まった場合も
+        // ハートビートを動かす。動かさないと 90 秒で参加者が待機画面に戻る
+        if (isPresenting) {
+            startHeartbeat();
+        } else {
+            stopHeartbeat();
+        }
+
         updatePresentModeUI();
         renderResults();
     } catch (error) {
