@@ -1493,17 +1493,28 @@ function openImageModal(src) {
     window.open(src, '_blank');
 }
 
+// グラフの色。統計サマリーの棒も同じ順で塗り、どの選択肢がどの色か対応させる
+// （embed.html の DOUGHNUT_COLORS / RATING_COLORS と同じ並び）
+const DOUGHNUT_COLORS = ['#4F46E5', '#10B981', '#F59E0B', '#EF4444',
+                         '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
+const RATING_COLORS   = ['#EF4444', '#F59E0B', '#6B7280', '#10B981', '#4F46E5'];
+
+function chartColorAt(question, i) {
+    const palette = question.question_type === 'rating' ? RATING_COLORS : DOUGHNUT_COLORS;
+    return palette[i % palette.length];
+}
+
 // 統計サマリー生成
 function generateStatsSummary(question, questionResponses) {
     const stats = calculateStats(question, questionResponses);
 
     return `
         <div class="stats-summary">
-            ${stats.map(s => `
+            ${stats.map((s, i) => `
                 <div class="stat-item">
                     <span class="stat-label">${escapeHtml(s.label)}</span>
                     <div class="stat-bar-container">
-                        <div class="stat-bar" style="width: ${s.percentage}%"></div>
+                        <div class="stat-bar" style="width: ${s.percentage}%; background: ${chartColorAt(question, i)}"></div>
                     </div>
                     <span class="stat-value">${s.count}件 (${s.percentage.toFixed(1)}%)</span>
                 </div>
@@ -1584,9 +1595,7 @@ function renderChart(question) {
                 labels: stats.map(s => s.label),
                 datasets: [{
                     data: stats.map(s => s.count),
-                    backgroundColor: [
-                        '#EF4444', '#F59E0B', '#6B7280', '#10B981', '#4F46E5'
-                    ]
+                    backgroundColor: stats.map((_, i) => chartColorAt(question, i))
                 }]
             },
             options: {
@@ -1620,10 +1629,7 @@ function renderChart(question) {
                 labels: stats.map(s => s.label),
                 datasets: [{
                     data: stats.map(s => s.count),
-                    backgroundColor: [
-                        '#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6',
-                        '#EC4899', '#06B6D4', '#84CC16'
-                    ]
+                    backgroundColor: stats.map((_, i) => chartColorAt(question, i))
                 }]
             },
             plugins: [ChartDataLabels],
